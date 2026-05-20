@@ -263,7 +263,7 @@ let
 		color = :steelblue, linewidth = 2, label = "sample mean")
 	lines!(ax, t, μ_true;
 		color = :black, linewidth = 2, linestyle = :dash, label = "true")
-	axislegend(ax; position = :rb)
+	axislegend(ax; position = :lt)
 	fig
 end
 
@@ -351,7 +351,7 @@ Its key fields are:
   as sampling weights, so a peaked profile concentrates draws near the MLE.
   A flat profile gives `exp(0) = 1` everywhere — uniform weight — so sampling
   falls back to approximately uniform within the CI box. This is a conservative
-  approximation: it spreads draws more broadly than a real profile would.
+  approximation: samples are spread more broadly than a peaked profile would allow.
 - `optimal_parameters` — the re-optimised full parameter vector at each grid
   point (shape `[n_points × n_sm_params]`). We set this to `zeros(20, 2)` as
   a structural placeholder; the GSA path does not use it.
@@ -404,7 +404,7 @@ begin
 	cm_as        = repeat(cm_a_vals; inner = length(cm_b_vals))
 	cm_bs        = repeat(cm_b_vals; outer = length(cm_a_vals))
 
-	uq_list   = [make_uq(k, b) for (k, b) in zip(cm_as, cm_bs)]
+	uq_list   = [make_uq(a, b) for (a, b) in zip(cm_as, cm_bs)]
 	cm_sample = GridCMSample([cm_as cm_bs])
 	cm_prior  = ParameterPrior([1.0, 0.3], [5.0, 0.7]; names = ["cm_a", "cm_b"])
 end
@@ -419,7 +419,7 @@ end
 Markdown.parse("""
 **Cohort summary** ($(length(cm_as)) cohorts)
 
-| cm\\_k | cm\\_b | a (fit) | a CI | b (fit) | b CI |
+| cm\\_a | cm\\_b | a (fit) | a CI | b (fit) | b CI |
 |--------|--------|---------|------|---------|------|
 $(join(rows, "\n"))
 """)
@@ -441,7 +441,7 @@ Because `cm_a` directly scales the SM amplitude $a$ and `cm_b` directly sets the
 begin
 	rng_efast    = Random.MersenneTwister(42)
 	result_efast = runSensitivity(
-		sm_gsa, uq_list, cm_sample, cm_prior, EFAST(n_samples = 500);
+		sm_gsa, uq_list, cm_sample, cm_prior, EFAST(n_samples = 100);
 		times = t_gsa,
 		rng   = rng_efast,
 	)
@@ -466,7 +466,7 @@ md"""
 ### 7b  Morris Screening
 
 Morris' elementary-effects method is a cheaper screening alternative. It
-returns **µ\*** (mean absolute elementary effect) — a measure of importance —
+returns $\mu^*$ (mean absolute elementary effect) — a measure of importance —
 but not total-order indices. Use it to rank parameters before committing to a
 full EFAST run.
 """
@@ -482,7 +482,7 @@ begin
 end
 
 # ╔═╡ 00000024-0000-0000-0000-000000000000
-sensitivity_S1(result_morris)   # µ* — [n_outputs × n_cm_params]
+sensitivity_S1(result_morris)   # μ* — [n_outputs × n_cm_params]
 
 # ╔═╡ 00000025-0000-0000-0000-000000000000
 md"""
@@ -503,7 +503,7 @@ two_outputs(pred) = [pred[1, 1], pred[end, 1]]
 begin
 	rng_custom    = Random.MersenneTwister(99)
 	result_custom = runSensitivity(
-		sm_gsa, uq_list, cm_sample, cm_prior, EFAST(n_samples = 500);
+		sm_gsa, uq_list, cm_sample, cm_prior, EFAST(n_samples = 100);
 		times    = t_gsa,
 		outputFn = two_outputs,
 		rng      = rng_custom,
