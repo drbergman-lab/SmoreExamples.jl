@@ -21,6 +21,7 @@ end
 begin
 	using SMoReBase
 	using SMoReGloS
+	using CairoMakie
 	using Distributions
 	using Random
 	using Statistics
@@ -247,6 +248,25 @@ $(join(rows, "\n"))
 """)
 end
 
+# ╔═╡ 00000029-0000-0000-0000-000000000000
+let
+	pred_mean = dropdims(mean(samples.predictions; dims = 3); dims = 3)
+	pred_lo   = dropdims(minimum(samples.predictions; dims = 3); dims = 3)
+	pred_hi   = dropdims(maximum(samples.predictions; dims = 3); dims = 3)
+
+	fig = Figure(size = (600, 300))
+	ax  = Axis(fig[1, 1]; xlabel = "time", ylabel = "y(t)",
+		title = "Prediction envelope (200 samples)")
+	band!(ax, t, pred_lo[:, 1], pred_hi[:, 1];
+		color = (:steelblue, 0.25), label = "min–max envelope")
+	lines!(ax, t, pred_mean[:, 1];
+		color = :steelblue, linewidth = 2, label = "sample mean")
+	lines!(ax, t, μ_true;
+		color = :black, linewidth = 2, linestyle = :dash, label = "true")
+	axislegend(ax; position = :rb)
+	fig
+end
+
 # ╔═╡ 00000018-0000-0000-0000-000000000000
 md"""
 ## 7  Global Sensitivity Analysis
@@ -269,12 +289,26 @@ objects** — one per CM cohort — that encode the SM parameter uncertainty at
 each CM parameter value where the CM was actually run.
 """
 
+# ╔═╡ 0000002a-0000-0000-0000-000000000000
+md"""
+### GSA surrogate model
+
+The GSA example uses a simpler **exponential decay** SM (distinct from the logistic SM above):
+
+$$y(t) = a \, e^{-b\,t}$$
+
+with amplitude $a$ and decay rate $b$. Two **CM parameters** drive this SM:
+`cm_a` and `cm_b`, which will be linked to $a$ and $b$, respectively. Because
+of this mapping from CM → SM parameters, we can predict sensitivity results
+in advance — a useful sanity check on the GSA machinery.
+"""
+
 # ╔═╡ 00000019-0000-0000-0000-000000000000
-# A second SM for the GSA demonstration: exponential decay a·exp(-b·t).
-# This is simpler than the logistic and lets sensitivity results be interpreted
-# analytically: the amplitude a scales directly with cm_k, so S1(cm_k) ≈ 1.
 sm_gsa = AnalyticalSurrogateModel(
-	fn = (t, p, _c) -> reshape(p[1] .* exp.(-p[2] .* t), :, 1),
+	fn = (t, p, _c) -> begin
+		a, b = p
+		reshape(a .* exp.(-b .* t), :, 1)
+	end,
 )
 
 # ╔═╡ 0000001a-0000-0000-0000-000000000000
@@ -286,7 +320,7 @@ md"""
 
 In a complete SMoReVerse workflow you would:
 
-1. Choose a grid of CM parameter values (here: `cm_k ∈ {1, 2, 3, 4, 5}`).
+1. Choose a grid of CM parameter values (here: `cm_a ∈ {1,…,5}`, `cm_b ∈ {0.3, 0.5, 0.7}` — 15 cohorts in total).
 2. Run the CM at each grid point to obtain summary statistics $(\mu, \sigma)$.
 3. Call `fitSurrogate` on each cohort's `CMData` to get an `SMFitResult`.
 4. Call `_uq` on each fit to get a `ProfileLikelihoodResult` with a real
@@ -362,27 +396,31 @@ function make_uq(a_true, b_true; ci_frac = 0.2)
 end
 
 # ╔═╡ 0000001d-0000-0000-0000-000000000000
-# Five cohorts: cm_k ∈ {1,2,3,4,5}. The SM amplitude a scales with cm_k,
-# while the decay rate b is held constant at 0.5.
+# 5 × 3 = 15 cohorts: cm_a ∈ {1,…,5} (scales amplitude a) × cm_b ∈ {0.3,0.5,0.7} (sets decay rate b).
 begin
-	cm_vals   = Float64.(1:5)
-	uq_list   = [make_uq(Float64(k), 0.5) for k in cm_vals]
-	cm_sample = GridCMSample(reshape(cm_vals, :, 1))
-	cm_prior  = ParameterPrior([1.0], [5.0]; names = ["cm_k"])
+	cm_a_vals = Float64.(1:5)
+	cm_b_vals = [0.3, 0.5, 0.7]
+
+	cm_as        = repeat(cm_a_vals; inner = length(cm_b_vals))
+	cm_bs        = repeat(cm_b_vals; outer = length(cm_a_vals))
+
+	uq_list   = [make_uq(k, b) for (k, b) in zip(cm_as, cm_bs)]
+	cm_sample = GridCMSample([cm_as cm_bs])
+	cm_prior  = ParameterPrior([1.0, 0.3], [5.0, 0.7]; names = ["cm_a", "cm_b"])
 end
 
 # ╔═╡ 0000001e-0000-0000-0000-000000000000
-let rows = map(1:5) do k
-	uq_k = uq_list[k]
-	a = uq_k.fit_result.parameters[1, 1]
-	b = uq_k.fit_result.parameters[1, 2]
-	"| $(cm_vals[k]) | $a | [$(uq_k.profiles[1].ci_lower), $(uq_k.profiles[1].ci_upper)] | $b | [$(uq_k.profiles[2].ci_lower), $(uq_k.profiles[2].ci_upper)] |"
+let rows = map(eachindex(cm_as)) do i
+	uq_i = uq_list[i]
+	a = uq_i.fit_result.parameters[1, 1]
+	b = uq_i.fit_result.parameters[1, 2]
+	"| $(cm_as[i]) | $(cm_bs[i]) | $a | [$(uq_i.profiles[1].ci_lower), $(uq_i.profiles[1].ci_upper)] | $b | [$(uq_i.profiles[2].ci_lower), $(uq_i.profiles[2].ci_upper)] |"
 end
 Markdown.parse("""
-**Cohort summary**
+**Cohort summary** ($(length(cm_as)) cohorts)
 
-| cm\\_k | a (fit) | a CI | b (fit) | b CI |
-|--------|---------|------|---------|------|
+| cm\\_k | cm\\_b | a (fit) | a CI | b (fit) | b CI |
+|--------|--------|---------|------|---------|------|
 $(join(rows, "\n"))
 """)
 end
@@ -393,10 +431,10 @@ md"""
 
 EFAST decomposes output variance into contributions from each CM parameter:
 
-- **S1** — first-order index: fraction of variance explained by `cm_k` alone.
-- **ST** — total-order index: fraction including all interactions involving `cm_k`.
+- **S1** — first-order index: fraction of variance explained by `cm_a` alone.
+- **ST** — total-order index: fraction including all interactions involving `cm_a`.
 
-Because `cm_k` directly scales the SM amplitude, we expect S1 ≈ ST ≈ 1.
+Because `cm_a` directly scales the SM amplitude $a$ and `cm_b` directly sets the decay rate $b$, we expect both to show non-zero sensitivity — with relative magnitudes depending on the time window and the spread in each parameter's prior.
 """
 
 # ╔═╡ 00000020-0000-0000-0000-000000000000
@@ -411,13 +449,15 @@ end
 
 # ╔═╡ 00000021-0000-0000-0000-000000000000
 let S1 = sensitivity_S1(result_efast), ST = sensitivity_ST(result_efast)
+	rows = map(eachindex(result_efast.cm_parameter_names)) do j
+		"| $(result_efast.cm_parameter_names[j]) | $(round(S1[1,j]; digits=4)) | $(round(ST[1,j]; digits=4)) |"
+	end
 	Markdown.parse("""
-**EFAST results**  (`$(result_efast.output_labels[1])` vs `$(result_efast.cm_parameter_names[1])`)
+**EFAST results**  (output: `$(result_efast.output_labels[1])`)
 
-| index | value |
-|-------|-------|
-| S1    | $(round(S1[1,1]; digits=4)) |
-| ST    | $(round(ST[1,1]; digits=4)) |
+| CM param | S1 | ST |
+|----------|----|----|
+$(join(rows, "\n"))
 """)
 end
 
@@ -450,9 +490,10 @@ md"""
 
 By default `outputFn` extracts the last time-point value. Supplying a custom
 function lets you compute any scalar summary — here we extract the **first**
-and **last** time points separately so EFAST returns distinct sensitivity
-indices for each, revealing whether early vs. late dynamics are equally
-sensitive to `cm_k`.
+and **last** time points separately. Because $y(0) = a$ is independent of $b$,
+the initial output is sensitive only to `cm_a`; the final output
+$y(T) = a\,e^{-bT}$ is sensitive to both, with `cm_b` contributing more than
+at $t = 0$.
 """
 
 # ╔═╡ 00000026-0000-0000-0000-000000000000
@@ -471,15 +512,19 @@ end
 
 # ╔═╡ 00000028-0000-0000-0000-000000000000
 let S1 = sensitivity_S1(result_custom), ST = sensitivity_ST(result_custom)
-	labels = ["t = $(t_gsa[1])  (initial)", "t = $(t_gsa[end])  (final)"]
-	rows = map(1:2) do j
-		"| $(labels[j]) | $(round(S1[j,1]; digits=4)) | $(round(ST[j,1]; digits=4)) |"
+	output_labels = ["t = $(t_gsa[1])  (initial)", "t = $(t_gsa[end])  (final)"]
+	pnames = result_custom.cm_parameter_names
+	header = "| output |" * join([" S1($(p)) | ST($(p)) |" for p in pnames], "")
+	sep    = "|--------|" * repeat("----------|----------|", length(pnames))
+	rows = map(1:2) do i
+		cells = join(["$(round(S1[i,j]; digits=4)) | $(round(ST[i,j]; digits=4))" for j in eachindex(pnames)], " | ")
+		"| $(output_labels[i]) | $cells |"
 	end
 	Markdown.parse("""
-**EFAST — two-output result**
+**EFAST — two outputs, two CM parameters**
 
-| output | S1 | ST |
-|--------|----|----|
+$header
+$sep
 $(join(rows, "\n"))
 """)
 end
@@ -508,7 +553,9 @@ end
 # ╟─00000015-0000-0000-0000-000000000000
 # ╠═00000016-0000-0000-0000-000000000000
 # ╠═00000017-0000-0000-0000-000000000000
+# ╠═00000029-0000-0000-0000-000000000000
 # ╟─00000018-0000-0000-0000-000000000000
+# ╟─0000002a-0000-0000-0000-000000000000
 # ╠═00000019-0000-0000-0000-000000000000
 # ╠═0000001a-0000-0000-0000-000000000000
 # ╟─0000001b-0000-0000-0000-000000000000

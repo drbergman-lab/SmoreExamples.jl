@@ -4,6 +4,7 @@ version = "0.0.1"
 authors = ["Daniel Bergman <danielrbergman@gmail.com> and contributors"]
 
 [deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Pluto = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
 SMoReBase = "5c232813-7b28-4e6f-a96c-e027eca8fd3b"
