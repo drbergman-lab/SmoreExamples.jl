@@ -8,7 +8,7 @@ makedocs(;
     authors="Daniel Bergman <danielrbergman@gmail.com> and contributors",
     sitename="SMoReExamples.jl",
     format=Documenter.HTML(;
-        canonical="https://Daniel Bergman.github.io/SMoReExamples.jl",
+        canonical="https://drbergman-lab.github.io/SMoReExamples.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -18,6 +18,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/Daniel Bergman/SMoReExamples.jl",
+    repo="github.com/drbergman-lab/SMoReExamples.jl",
     devbranch="main",
 )
