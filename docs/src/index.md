@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = SMoReExamples
+CurrentModule = SmoreExamples
 ```
 
-# SMoReExamples
+# SmoreExamples
 
-Documentation for [SMoReExamples](https://github.com/drbergman-lab/SMoReExamples.jl).
+Documentation for [SmoreExamples](https://github.com/drbergman-lab/SmoreExamples.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [SMoReExamples]
+Modules = [SmoreExamples]
 ```

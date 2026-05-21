@@ -5,11 +5,11 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ 00000001-0000-0000-0000-000000000000
-# Launch Pluto pointing at the SMoReExamples project so that the local
-# SMoReBase and SMoReGloS packages resolve correctly:
+# Launch Pluto pointing at the SmoreExamples project so that the local
+# SmoreBase and SmoreGloS packages resolve correctly:
 #
 #   using Pluto
-#   Pluto.run(project = "/path/to/SMoReExamples")
+#   Pluto.run(project = "/path/to/SmoreExamples")
 #
 begin
 	import Pkg
@@ -19,8 +19,7 @@ end
 
 # ╔═╡ 00000002-0000-0000-0000-000000000000
 begin
-	using SMoReBase
-	using SMoReGloS
+	using Smore
 	using CairoMakie
 	using Distributions
 	using Random
@@ -29,9 +28,9 @@ end
 
 # ╔═╡ 00000003-0000-0000-0000-000000000000
 md"""
-# The SMoReVerse Pipeline: Logistic Growth Tutorial
+# The SmoreVerse Pipeline: Logistic Growth Tutorial
 
-**SMoReVerse** sits between a slow, expensive *complex model* (CM) and the
+**SmoreVerse** sits between a slow, expensive *complex model* (CM) and the
 real world. A fast *surrogate model* (SM) is trained on CM-generated output,
 then used as a proxy for fitting to data and for analysing CM behaviour.
 
@@ -40,9 +39,9 @@ toy SM, covering three sub-packages in sequence:
 
 | Step | Sub-package | What it does |
 |------|-------------|--------------|
-| 1–4  | `SMoReBase` | Define the SM, build data, fit parameters |
-| 5–6  | `SMoReBase` | Quantify SM parameter uncertainty; sample predictions |
-| 7    | `SMoReGloS` | Global sensitivity of SM outputs to CM parameters |
+| 1–4  | `SmoreBase` | Define the SM, build data, fit parameters |
+| 5–6  | `SmoreBase` | Quantify SM parameter uncertainty; sample predictions |
+| 7    | `SmoreGloS` | Global sensitivity of SM outputs to CM parameters |
 
 All intermediate results are kept in scope so you can inspect them in the
 REPL after running the notebook.
@@ -58,7 +57,7 @@ $$y(t) = \frac{K}{1 + \left(\frac{K}{y_0} - 1\right) e^{-r t}}, \qquad y_0 = 0.0
 
 with two free parameters: growth rate $r$ and carrying capacity $K$.
 
-In a real SMoReVerse application the SM would be fit to summary statistics
+In a real SmoreVerse application the SM would be fit to summary statistics
 produced by an agent-based model or ODE system (the CM). Here we treat the
 logistic equation itself as the SM so results can be checked against known
 ground truth.
@@ -93,7 +92,7 @@ end
 md"Evaluating the SM at the true parameters gives an `[11 × 1]` matrix:"
 
 # ╔═╡ 00000009-0000-0000-0000-000000000000
-SMoReBase._evaluate(sm, t, p_true, "default")
+SmoreBase._evaluate(sm, t, p_true, "default")
 
 # ╔═╡ 0000000a-0000-0000-0000-000000000000
 md"""
@@ -188,7 +187,7 @@ independently, so correlations are not captured.
 """
 
 # ╔═╡ 00000013-0000-0000-0000-000000000000
-uq = SMoReBase._uq(sm, data, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+uq = SmoreBase._uq(sm, data, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
 
 # ╔═╡ 0000002c-0000-0000-0000-000000000000
 plot(uq)
@@ -308,7 +307,7 @@ t_gsa = collect(range(0.0, 5.0, 10))
 md"""
 ### Constructing cohort UQ results
 
-In a complete SMoReVerse workflow you would:
+In a complete SmoreVerse workflow you would:
 
 1. Choose a grid of CM parameter values (here: `cm_a ∈ {1,…,5}`, `cm_b ∈ {0.3, 0.5, 0.7}` — 15 cohorts in total).
 2. Run the CM at each grid point to obtain summary statistics $(\mu, \sigma)$.

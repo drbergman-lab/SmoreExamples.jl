@@ -1,4 +1,4 @@
-module SMoReExamples
+module SmoreExamples
 
 # Write your package code here.
 

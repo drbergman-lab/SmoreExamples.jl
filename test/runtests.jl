@@ -1,6 +1,6 @@
-using SMoReExamples
+using SmoreExamples
 using Test
 
-@testset "SMoReExamples.jl" begin
+@testset "SmoreExamples.jl" begin
     # Write your tests here.
 end

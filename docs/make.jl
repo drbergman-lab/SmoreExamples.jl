@@ -1,14 +1,14 @@
-using SMoReExamples
+using SmoreExamples
 using Documenter
 
-DocMeta.setdocmeta!(SMoReExamples, :DocTestSetup, :(using SMoReExamples); recursive=true)
+DocMeta.setdocmeta!(SmoreExamples, :DocTestSetup, :(using SmoreExamples); recursive=true)
 
 makedocs(;
-    modules=[SMoReExamples],
+    modules=[SmoreExamples],
     authors="Daniel Bergman <danielrbergman@gmail.com> and contributors",
-    sitename="SMoReExamples.jl",
+    sitename="SmoreExamples.jl",
     format=Documenter.HTML(;
-        canonical="https://drbergman-lab.github.io/SMoReExamples.jl",
+        canonical="https://drbergman-lab.github.io/SmoreExamples.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -18,6 +18,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/drbergman-lab/SMoReExamples.jl",
+    repo="github.com/drbergman-lab/SmoreExamples.jl",
     devbranch="main",
 )
