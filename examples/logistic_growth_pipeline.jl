@@ -5,17 +5,11 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ 00000001-0000-0000-0000-000000000000
-# Launch Pluto pointing at the SmoreExamples project so that the local
-# SmoreBase and SmoreGloS packages resolve correctly:
+# Launch via SmoreExamples.run_example(), or manually:
 #
 #   using Pluto
-#   Pluto.run(project = "/path/to/SmoreExamples")
-#
-begin
-	import Pkg
-	Pkg.activate(joinpath(@__DIR__, ".."))
-	Pkg.instantiate()
-end
+#   Pluto.run(notebook                   = "/path/to/logistic_growth_pipeline.jl",
+#             workspace_custom_startup_expr = "import Pkg; Pkg.activate(\"/path/to/SmoreExamples\"); Pkg.instantiate()")
 
 # ╔═╡ 00000002-0000-0000-0000-000000000000
 begin
@@ -41,7 +35,7 @@ toy SM, covering three sub-packages in sequence:
 |------|-------------|--------------|
 | 1–4  | `SmoreBase` | Define the SM, build data, fit parameters |
 | 5–6  | `SmoreBase` | Quantify SM parameter uncertainty; sample predictions |
-| 7    | `SmoreGloS` | Global sensitivity of SM outputs to CM parameters |
+| 7    | `SmoreGSA`  | Global sensitivity of SM outputs to CM parameters |
 
 All intermediate results are kept in scope so you can inspect them in the
 REPL after running the notebook.
