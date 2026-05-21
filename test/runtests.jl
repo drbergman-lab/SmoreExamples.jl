@@ -2,5 +2,6 @@ using SmoreExamples
 using Test
 
 @testset "SmoreExamples.jl" begin
-    # Write your tests here.
+    @test isdir(examplesdir())
+    @test isfile(examplepath("logistic_growth_pipeline.jl"))
 end

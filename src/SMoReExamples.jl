@@ -1,5 +1,9 @@
 module SmoreExamples
 
-# Write your package code here.
+export examplesdir, examplepath
+
+examplesdir() = joinpath(pkgdir(SmoreExamples), "examples")
+
+examplepath(name::AbstractString) = joinpath(examplesdir(), name)
 
 end
