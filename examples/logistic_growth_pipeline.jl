@@ -134,19 +134,22 @@ The prior serves two roles:
 # ╔═╡ 0000000e-0000-0000-0000-000000000000
 prior = ParameterPrior([0.01, 0.5], [2.0, 10.0]; names = ["r", "K"])
 
+# ╔═╡ 00000030-0000-0000-0000-000000000000
+prob = SMFitProblem(sm, data, prior)
+
 # ╔═╡ 0000000f-0000-0000-0000-000000000000
 md"""
 ## 4  Fitting the SM
 
-`fitSurrogate` minimises the Gaussian negative log-likelihood between the SM
-prediction and the CM summary statistics, using a bounded L-BFGS optimiser.
-`P0` is the initial guess matrix `[n_param_sets × n_sm_params]`.
+`SMFitProblem` bundles the surrogate model, CM data, prior, and (optionally)
+a custom loss into a single object. `fitSurrogate` then takes the problem and
+an initial-guess matrix `P0` `[n_param_sets × n_sm_params]`.
 """
 
 # ╔═╡ 00000010-0000-0000-0000-000000000000
 begin
 	P0     = [0.5 5.0]
-	result = fitSurrogate(sm, data, P0, prior)
+	result = fitSurrogate(prob, P0)
 end
 
 # ╔═╡ 00000011-0000-0000-0000-000000000000
@@ -181,7 +184,7 @@ independently, so correlations are not captured.
 """
 
 # ╔═╡ 00000013-0000-0000-0000-000000000000
-uq = SmoreBase._uq(sm, data, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+uq = SmoreBase._uq(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
 
 # ╔═╡ 0000002c-0000-0000-0000-000000000000
 plot(uq)
@@ -226,7 +229,7 @@ identified, like $K$ here), the envelope is wide.
 # ╔═╡ 00000016-0000-0000-0000-000000000000
 begin
 	rng_sample = Random.MersenneTwister(42)
-	samples    = sampleSMPredictions(sm, uq; nSamples = 200, rng = rng_sample)
+	samples    = sampleSMPredictions(prob, uq; nSamples = 200, rng = rng_sample)
 end
 
 # ╔═╡ 00000017-0000-0000-0000-000000000000
@@ -536,6 +539,7 @@ plot(result_custom)
 # ╟─0000000c-0000-0000-0000-000000000000
 # ╟─0000000d-0000-0000-0000-000000000000
 # ╠═0000000e-0000-0000-0000-000000000000
+# ╠═00000030-0000-0000-0000-000000000000
 # ╟─0000000f-0000-0000-0000-000000000000
 # ╠═00000010-0000-0000-0000-000000000000
 # ╟─00000011-0000-0000-0000-000000000000
@@ -569,3 +573,5 @@ plot(result_custom)
 # ╠═00000027-0000-0000-0000-000000000000
 # ╠═00000028-0000-0000-0000-000000000000
 # ╠═0000002f-0000-0000-0000-000000000000
+# ╟─00000000-0000-0000-0000-000000000001
+# ╟─00000000-0000-0000-0000-000000000002
