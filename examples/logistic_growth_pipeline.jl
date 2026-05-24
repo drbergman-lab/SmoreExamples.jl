@@ -524,6 +524,18 @@ end
 # ╔═╡ 0000002f-0000-0000-0000-000000000000
 plot(result_custom)
 
+# ╔═╡ 00000031-0000-0000-0000-000000000000
+md"""
+## 8  Next: CM Posterior from Real Data
+
+GSA tells you which CM parameters *matter*. The complementary question —
+given **real-world observations**, which CM parameter values are *consistent*
+with that data? — is answered by `SmoreFit.buildPosterior`, which reuses the
+same per-cohort `ProfileLikelihoodResult` you already have. See
+[`cm_posterior_pipeline.jl`](./cm_posterior_pipeline.jl) for the full Step 8
+walk-through (bridge methods, accept/graded posteriors, interior queries).
+"""
+
 # ╔═╡ Cell order:
 # ╟─00000001-0000-0000-0000-000000000000
 # ╟─00000002-0000-0000-0000-000000000000
@@ -573,5 +585,6 @@ plot(result_custom)
 # ╠═00000027-0000-0000-0000-000000000000
 # ╠═00000028-0000-0000-0000-000000000000
 # ╠═0000002f-0000-0000-0000-000000000000
+# ╟─00000031-0000-0000-0000-000000000000
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
