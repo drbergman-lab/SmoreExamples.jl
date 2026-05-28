@@ -12,7 +12,7 @@ Smore = "23b2bb2a-7f74-494c-9af6-5faea0e0a514"
 [compat]
 CairoMakie = "0.15"
 Distributions = "0.25"
-Pluto = "0.20.27"
+Pluto = "0.20.27, 1.0"
 Smore = "0.1.2"
 julia = "1.10.10"
 
