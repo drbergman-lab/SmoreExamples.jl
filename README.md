@@ -16,11 +16,25 @@
 
 ## Running a notebook
 
-The easiest way is `SmoreExamples.run_example`:
+Loading the package in an interactive session prints the available examples. To
+suppress that, set the environment variable before loading:
+
+```julia
+ENV["SMOREEXAMPLES_QUIET"] = "true"
+using SmoreExamples
+```
+
+You can also see the list at any time by calling `list_examples`:
 
 ```julia
 using SmoreExamples
-SmoreExamples.run_example("cm_posterior_pipeline.jl")
+list_examples()
+```
+
+The easiest way to open one is `run_example`:
+
+```julia
+run_example("cm_posterior_pipeline.jl")
 ```
 
 That copies the bundled notebooks to a temp directory (pass `dir = "/your/path"`
