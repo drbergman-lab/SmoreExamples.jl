@@ -208,7 +208,7 @@ md"""
 """
 
 # ╔═╡ 00000017-0000-0000-0000-000000000000
-uq = SmoreBase._uq(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+uq = quantifyUncertainty(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
 
 # ╔═╡ 00000018-0000-0000-0000-000000000000
 plot(uq)

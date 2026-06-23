@@ -184,7 +184,7 @@ independently, so correlations are not captured.
 """
 
 # ╔═╡ 00000013-0000-0000-0000-000000000000
-uq = SmoreBase._uq(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+uq = quantifyUncertainty(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
 
 # ╔═╡ 0000002c-0000-0000-0000-000000000000
 plot(uq)
@@ -309,7 +309,7 @@ In a complete SmoreVerse workflow you would:
 1. Choose a grid of CM parameter values (here: `cm_a ∈ {1,…,5}`, `cm_b ∈ {0.3, 0.5, 0.7}` — 15 cohorts in total).
 2. Run the CM at each grid point to obtain summary statistics $(\mu, \sigma)$.
 3. Call `fitSurrogate` on each cohort's `CMData` to get an `SMFitResult`.
-4. Call `_uq` on each fit to get a `ProfileLikelihoodResult` with a real
+4. Call `quantifyUncertainty` on each fit to get a `ProfileLikelihoodResult` with a real
    profile LL curve.
 
 **Here we skip steps 1–4** and construct the `ProfileLikelihoodResult` objects
@@ -320,7 +320,7 @@ where it diverges from a real result.
 #### What `make_uq` constructs
 
 `make_uq(a_true, b_true)` builds the data structures that would normally emerge
-from `fitSurrogate` + `_uq`:
+from `fitSurrogate` + `quantifyUncertainty`:
 
 **`SMFitResult`** records the output of `fitSurrogate`. In a real result its
 fields carry the best-fit parameters, the NLL at the optimum, convergence
