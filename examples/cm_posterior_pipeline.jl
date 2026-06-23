@@ -56,7 +56,8 @@ This notebook walks through:
 md"""
 ## 1  Surrogate Model
 
-The same exponential decay SM used in Step 7 of `logistic_growth_pipeline.jl`:
+This notebook uses a simple exponential decay SM, chosen for its closed-form
+CM → SM mapping:
 
 $$y(t) = a \, e^{-b\,t}$$
 

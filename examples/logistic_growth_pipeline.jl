@@ -37,6 +37,12 @@ toy SM, covering three sub-packages in sequence:
 | 5–6  | `SmoreBase` | Quantify SM parameter uncertainty; sample predictions |
 | 7    | `SmoreGSA`  | Global sensitivity of SM outputs to CM parameters |
 
+The time window runs through the inflection point and into saturation, so both
+the growth rate $r$ and the carrying capacity $K$ are identifiable. A companion
+notebook, [`nonidentifiability.jl`](./nonidentifiability.jl), revisits the model
+on a shorter, exponential-phase-only window to show what a *non-identifiable*
+parameter looks like.
+
 All intermediate results are kept in scope so you can inspect them in the
 REPL after running the notebook.
 """
@@ -78,12 +84,12 @@ sm = AnalyticalSurrogateModel(fn = logistic)
 # ╔═╡ 00000007-0000-0000-0000-000000000000
 # Time grid and ground-truth parameters used throughout this notebook.
 begin
-	t      = collect(0.0:0.5:5.0)   # 11 time points
+	t      = collect(0.0:1.0:20.0)  # 21 time points: exponential rise → inflection → saturation
 	p_true = [0.6, 4.0]             # true r and K
 end
 
 # ╔═╡ 00000008-0000-0000-0000-000000000000
-md"Evaluating the SM at the true parameters gives an `[11 × 1]` matrix:"
+md"Evaluating the SM at the true parameters gives an `[21 × 1]` matrix:"
 
 # ╔═╡ 00000009-0000-0000-0000-000000000000
 SmoreBase._evaluate(sm, t, p_true, "default")
@@ -204,9 +210,11 @@ Markdown.parse("""
 |-------|-----|--------|
 $(join(rows, "\n"))
 
-`K` has no upper CI bound because the data span only the exponential phase of
-logistic growth — the carrying capacity is not yet "felt" and the profile
-remains flat above the fitted value.
+Both `r` and `K` are well identified: the time window runs through the
+inflection point and into saturation, so the data constrain the carrying
+capacity from above. For the contrasting case — data confined to the early
+exponential phase, where `K`'s profile stays flat and its CI is unbounded — see
+the companion notebook [`nonidentifiability.jl`](./nonidentifiability.jl).
 """)
 end
 
@@ -222,8 +230,9 @@ Internally it uses a **Sobol low-discrepancy sequence** in
 $[0,1]^{n_\text{SM params}}$ with a **Cranley–Patterson random shift** for
 reproducibility, then applies the per-parameter profile-LL inverse CDF to map
 each unit-cube draw to the natural parameter scale. Where the profile is
-narrow (well-identified), the envelope is tight; where it is flat (weakly
-identified, like $K$ here), the envelope is wide.
+narrow (well-identified, as both $r$ and $K$ are on this window), the envelope
+is tight; where a profile is flat (weakly identified), the envelope fans out —
+see [`nonidentifiability.jl`](./nonidentifiability.jl) for that case.
 """
 
 # ╔═╡ 00000016-0000-0000-0000-000000000000
@@ -262,6 +271,17 @@ CM parameters?* The CM parameters control the biology (e.g., a cell kill rate
 or proliferation rate); as they vary, so do the best-fit SM parameters and
 their uncertainty.
 
+Here the two CM parameters map directly onto the logistic SM: `cm_r` maps to the
+growth rate $r$, and `cm_K` maps to the carrying capacity $K$. That one-to-one
+mapping lets us predict the sensitivities in advance — a handy sanity check on
+the GSA machinery:
+
+- the **saturated** output $y(T) \approx K$ should depend almost entirely on `cm_K`;
+- an **early**, exponential-phase output should depend almost entirely on `cm_r`.
+
+Section 7a confirms the first (the default output is the last time point) and
+Section 7c the second.
+
 The GSA engine (EFAST or Morris) sweeps the CM parameter space by calling a
 function $f(u)$, $u \in [0,1]^{n_\text{CM}}$, at many points. That function:
 
@@ -275,137 +295,70 @@ objects** — one per CM cohort — that encode the SM parameter uncertainty at
 each CM parameter value where the CM was actually run.
 """
 
-# ╔═╡ 0000002a-0000-0000-0000-000000000000
-md"""
-### GSA surrogate model
-
-The GSA example uses a simpler **exponential decay** SM (distinct from the logistic SM above):
-
-$$y(t) = a \, e^{-b\,t}$$
-
-with amplitude $a$ and decay rate $b$. Two **CM parameters** drive this SM:
-`cm_a` and `cm_b`, which will be linked to $a$ and $b$, respectively. Because
-of this mapping from CM → SM parameters, we can predict sensitivity results
-in advance — a useful sanity check on the GSA machinery.
-"""
-
 # ╔═╡ 00000019-0000-0000-0000-000000000000
-sm_gsa = AnalyticalSurrogateModel(
-	fn = (t, p, _c) -> begin
-		a, b = p
-		reshape(a .* exp.(-b .* t), :, 1)
-	end,
-)
+sm_gsa = sm   # the logistic SM from Section 1
 
 # ╔═╡ 0000001a-0000-0000-0000-000000000000
-t_gsa = collect(range(0.0, 5.0, 10))
+t_gsa = collect(range(0.0, 20.0, 21))   # exponential rise → saturation, as in Section 1
 
 # ╔═╡ 0000001b-0000-0000-0000-000000000000
 md"""
 ### Constructing cohort UQ results
 
-In a complete SmoreVerse workflow you would:
+GSA needs one `ProfileLikelihoodResult` per CM cohort — the SM-parameter
+uncertainty induced by the CM running at each grid point. We build them with the
+very same fit + profile-likelihood workflow from Sections 4–5, now run once per
+cohort:
 
-1. Choose a grid of CM parameter values (here: `cm_a ∈ {1,…,5}`, `cm_b ∈ {0.3, 0.5, 0.7}` — 15 cohorts in total).
-2. Run the CM at each grid point to obtain summary statistics $(\mu, \sigma)$.
-3. Call `fitSurrogate` on each cohort's `CMData` to get an `SMFitResult`.
-4. Call `_uq` on each fit to get a `ProfileLikelihoodResult` with a real
-   profile LL curve.
+1. Choose a grid of CM parameter values (here: `cm_r ∈ {0.4, 0.6, 0.8}`, `cm_K ∈ {2,…,6}` — 15 cohorts in total).
+2. At each grid point, form the cohort's `CMData`. Here we generate it by
+   evaluating the SM at the CM-true parameters; in a real workflow this is the
+   CM's own output.
+3. `fitSurrogate` → `SMFitResult`, then `_uq` → `ProfileLikelihoodResult`.
 
-**Here we skip steps 1–4** and construct the `ProfileLikelihoodResult` objects
-synthetically. This isolates the GSA machinery from the CM execution cost, but
-it is important to understand what the synthetic construction approximates and
-where it diverges from a real result.
-
-#### What `make_uq` constructs
-
-`make_uq(a_true, b_true)` builds the data structures that would normally emerge
-from `fitSurrogate` + `_uq`:
-
-**`SMFitResult`** records the output of `fitSurrogate`. In a real result its
-fields carry the best-fit parameters, the NLL at the optimum, convergence
-flags, and the raw solver objects. Here we hard-code `parameters = [a_true b_true]`
-(the "truth" we would have recovered), `errors = [0.0]` (perfect fit), and
-`optim_results = [nothing]`.
-
-**`ProfileCurve`** records the profile likelihood sweep for one SM parameter.
-Its key fields are:
-- `profile_values` — the grid of swept values (here 20 points over `[0, 5]`).
-- `log_likelihoods` — the profile LL at each grid point. **We set these to
-  `zeros(20)`, a completely flat profile.** In a real result the curve peaks
-  at the MLE and drops off on both sides; `_sampleSMParams` uses `exp(ll)`
-  as sampling weights, so a peaked profile concentrates draws near the MLE.
-  A flat profile gives `exp(0) = 1` everywhere — uniform weight — so sampling
-  falls back to approximately uniform within the CI box. This is a conservative
-  approximation: samples are spread more broadly than a peaked profile would allow.
-- `optimal_parameters` — the re-optimised full parameter vector at each grid
-  point (shape `[n_points × n_sm_params]`). We set this to `zeros(20, 2)` as
-  a structural placeholder; the GSA path does not use it.
-- `ci_lower`, `ci_upper` — the confidence interval bounds. We set these to
-  `±20%` of the true parameter value. In a real result they are determined by
-  where the profile LL crosses the Wilks threshold. These bounds are what
-  `_buildCMCallable` interpolates across the CM grid to sample SM parameters
-  at each GSA evaluation point.
-
-#### Impact on GSA results
-
-The GSA will still correctly *rank* CM parameter importance. The sensitivity
-indices may differ quantitatively from what real UQ results would give because:
-- Flat profiles → wider, more uniform sampling → different variance decomposition.
-- Real profiles concentrate mass near the MLE → tighter sampling → potentially
-  higher S1 and lower sampling noise.
-
-In practice, constructing synthetic UQ objects is a useful way to prototype the
-GSA pipeline before committing to the computational cost of running the CM.
+Because the SM is analytic, all 15 fits take only a second or two. When the CM
+is genuinely expensive you would precompute and cache these per-cohort results,
+but the GSA call itself is unchanged.
 """
 
 # ╔═╡ 0000001c-0000-0000-0000-000000000000
-function make_uq(a_true, b_true; ci_frac = 0.2)
-	lb  = [0.0, 0.0]
-	ub  = [5.0, 5.0]
-	pr  = ParameterPrior(lb, ub; names = ["a", "b"])
-	par = [a_true b_true]
-	fit = SMFitResult(par, [0.0], par, pr, BitVector([true]), Any[nothing])
-
-	# ProfileCurve(index, name, profile_values, log_likelihoods, optimal_parameters,
-	#              ci_lower, ci_upper, threshold, reference_ll)
-	# log_likelihoods = zeros(20): flat profile → uniform sampling within CI box.
-	# optimal_parameters = zeros(20,2): placeholder, not used in GSA path.
-	pc_a = ProfileCurve(1, "a",
-		collect(range(lb[1], ub[1], 20)), zeros(20), zeros(20, 2),
-		a_true * (1 - ci_frac), a_true * (1 + ci_frac), -1.92, 0.0)
-	pc_b = ProfileCurve(2, "b",
-		collect(range(lb[2], ub[2], 20)), zeros(20), zeros(20, 2),
-		b_true * (1 - ci_frac), b_true * (1 + ci_frac), -1.92, 0.0)
-
-	return ProfileLikelihoodResult([pc_a, pc_b], fit, t_gsa)
+# Real per-cohort UQ: the Section 4–5 workflow (fit + profile likelihood),
+# run on the CMData a single cohort would produce.
+function cohort_uq(cm_r, cm_K)
+	μ = vec(logistic(t_gsa, [cm_r, cm_K], nothing))
+	d = CMData(μ = μ, σ = fill(noise_σ, length(μ)), times = t_gsa)
+	p = SMFitProblem(sm, d, prior)
+	res = fitSurrogate(p, [cm_r cm_K])
+	return SmoreBase._uq(p, res, ProfileLikelihood(n_points = 15, confidence_level = 0.95))
 end
 
 # ╔═╡ 0000001d-0000-0000-0000-000000000000
-# 5 × 3 = 15 cohorts: cm_a ∈ {1,…,5} (scales amplitude a) × cm_b ∈ {0.3,0.5,0.7} (sets decay rate b).
+# 3 × 5 = 15 cohorts: cm_r ∈ {0.4,0.6,0.8} (sets growth rate r) × cm_K ∈ {2,…,6} (sets carrying capacity K).
 begin
-	cm_a_vals = Float64.(1:5)
-	cm_b_vals = [0.3, 0.5, 0.7]
+	cm_r_vals = [0.4, 0.6, 0.8]
+	cm_K_vals = Float64.(2:6)
 
-	cm_as        = repeat(cm_a_vals; inner = length(cm_b_vals))
-	cm_bs        = repeat(cm_b_vals; outer = length(cm_a_vals))
+	cm_rs        = repeat(cm_r_vals; inner = length(cm_K_vals))
+	cm_Ks        = repeat(cm_K_vals; outer = length(cm_r_vals))
 
-	uq_list   = [make_uq(a, b) for (a, b) in zip(cm_as, cm_bs)]
-	cm_sample = GridCMSample([cm_as cm_bs])
-	cm_prior  = ParameterPrior([1.0, 0.3], [5.0, 0.7]; names = ["cm_a", "cm_b"])
+	uq_list   = [cohort_uq(r, K) for (r, K) in zip(cm_rs, cm_Ks)]
+	cm_sample = GridCMSample([cm_rs cm_Ks])
+	cm_prior  = ParameterPrior([0.4, 2.0], [0.8, 6.0]; names = ["cm_r", "cm_K"])
 end
 
 # ╔═╡ 0000001e-0000-0000-0000-000000000000
-let rows = map(eachindex(cm_as)) do i
-	uq_i = uq_list[i]
-	a = uq_i.fit_result.parameters[1, 1]
-	b = uq_i.fit_result.parameters[1, 2]
-	"| $(cm_as[i]) | $(cm_bs[i]) | $a | [$(uq_i.profiles[1].ci_lower), $(uq_i.profiles[1].ci_upper)] | $b | [$(uq_i.profiles[2].ci_lower), $(uq_i.profiles[2].ci_upper)] |"
-end
+let fmt(x) = x === nothing ? "—" : string(round(x; digits = 3))
+	ci(pc) = "[$(fmt(pc.ci_lower)), $(fmt(pc.ci_upper))]"
+	rows = map(eachindex(cm_rs)) do i
+		uq_i = uq_list[i]
+		r = round(uq_i.fit_result.parameters[1, 1]; digits = 3)
+		K = round(uq_i.fit_result.parameters[1, 2]; digits = 3)
+		"| $(cm_rs[i]) | $(cm_Ks[i]) | $r | $(ci(uq_i.profiles[1])) | $K | $(ci(uq_i.profiles[2])) |"
+	end
 Markdown.parse("""
-**Cohort summary** ($(length(cm_as)) cohorts)
+**Cohort summary** ($(length(cm_rs)) cohorts)
 
-| cm\\_a | cm\\_b | a (fit) | a CI | b (fit) | b CI |
+| cm\\_r | cm\\_K | r (fit) | r CI | K (fit) | K CI |
 |--------|--------|---------|------|---------|------|
 $(join(rows, "\n"))
 """)
@@ -417,10 +370,14 @@ md"""
 
 EFAST decomposes output variance into contributions from each CM parameter:
 
-- **S1** — first-order index: fraction of variance explained by `cm_a` alone.
-- **ST** — total-order index: fraction including all interactions involving `cm_a`.
+- **S1** — first-order index: fraction of variance explained by `cm_r` alone.
+- **ST** — total-order index: fraction including all interactions involving `cm_r`.
 
-Because `cm_a` directly scales the SM amplitude $a$ and `cm_b` directly sets the decay rate $b$, we expect both to show non-zero sensitivity — with relative magnitudes depending on the time window and the spread in each parameter's prior.
+The default `outputFn` summarises each prediction by its **last** time point.
+Because our window runs out to saturation, that value is $y(T) \approx K$, so we
+expect `cm_K` to dominate the variance and `cm_r` to contribute very little. The
+complementary picture — `cm_r` dominating an *early*-time output — appears in
+Section 7c.
 """
 
 # ╔═╡ 00000020-0000-0000-0000-000000000000
@@ -481,15 +438,26 @@ md"""
 ### 7c  Custom `outputFn`
 
 By default `outputFn` extracts the last time-point value. Supplying a custom
-function lets you compute any scalar summary — here we extract the **first**
-and **last** time points separately. Because $y(0) = a$ is independent of $b$,
-the initial output is sensitive only to `cm_a`; the final output
-$y(T) = a\,e^{-bT}$ is sensitive to both, with `cm_b` contributing more than
-at $t = 0$.
+function lets you compute any scalar summary — here we extract an **early** and
+the **final** (saturated) time point separately. We define the early point as
+the time at which the trajectory reaches **10% of carrying capacity** (found by
+solving $y(t) = 0.1\,K$), which keeps it deep in the exponential phase where
+growth is governed by the rate — so the early output is sensitive almost
+entirely to `cm_r`. At saturation $y(T) \approx K$, so the final output is
+sensitive almost entirely to `cm_K`. This cleanly separates the two parameters'
+regimes.
 """
 
 # ╔═╡ 00000026-0000-0000-0000-000000000000
-two_outputs(pred) = [pred[1, 1], pred[end, 1]]
+# "Early" output: the time at which the nominal trajectory reaches 10% of K.
+# Solving y(t) = 0.1·K for t keeps the point in the exponential phase and is
+# robust to changes in the time grid.
+begin
+	early_frac        = 0.1
+	t_early           = log(early_frac * (p_true[2] / 0.01 - 1) / (1 - early_frac)) / p_true[1]
+	i_early           = argmin(abs.(t_gsa .- t_early))
+	two_outputs(pred) = [pred[i_early, 1], pred[end, 1]]
+end
 
 # ╔═╡ 00000027-0000-0000-0000-000000000000
 begin
@@ -504,7 +472,7 @@ end
 
 # ╔═╡ 00000028-0000-0000-0000-000000000000
 let S1 = sensitivity_S1(result_custom), ST = sensitivity_ST(result_custom)
-	output_labels = ["t = $(t_gsa[1])  (initial)", "t = $(t_gsa[end])  (final)"]
+	output_labels = ["t = $(t_gsa[i_early])  (≈10% of K, exponential phase)", "t = $(t_gsa[end])  (saturated)"]
 	pnames = result_custom.cm_parameter_names
 	header = "| output |" * join([" S1($(p)) | ST($(p)) |" for p in pnames], "")
 	sep    = "|--------|" * repeat("----------|----------|", length(pnames))
@@ -530,8 +498,8 @@ md"""
 
 GSA tells you which CM parameters *matter*. The complementary question —
 given **real-world observations**, which CM parameter values are *consistent*
-with that data? — is answered by `SmoreFit.buildPosterior`, which reuses the
-same per-cohort `ProfileLikelihoodResult` you already have. See
+with that data? — is answered by `SmoreFit.buildPosterior`, which works from the
+same kind of per-cohort `ProfileLikelihoodResult` that GSA consumes. See
 [`cm_posterior_pipeline.jl`](./cm_posterior_pipeline.jl) for the full Step 8
 walk-through (bridge methods, accept/graded posteriors, interior queries).
 """
@@ -565,7 +533,6 @@ walk-through (bridge methods, accept/graded posteriors, interior queries).
 # ╠═00000017-0000-0000-0000-000000000000
 # ╠═00000029-0000-0000-0000-000000000000
 # ╟─00000018-0000-0000-0000-000000000000
-# ╟─0000002a-0000-0000-0000-000000000000
 # ╠═00000019-0000-0000-0000-000000000000
 # ╠═0000001a-0000-0000-0000-000000000000
 # ╟─0000001b-0000-0000-0000-000000000000
