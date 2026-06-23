@@ -45,7 +45,9 @@ function Base.show(io::IO, ::MIME"text/plain", l::ExampleList)
 end
 
 # Pull the first Markdown H1 (`# ...`) out of a Pluto notebook's `md\"\"\"` block.
-# Falls back to the file name (sans extension) if no heading is found.
+# Only `# ` lines *inside* an md block count, so Pluto cell markers (`# ╔═╡ …`),
+# which sit between blocks, are never mistaken for a heading. Falls back to the
+# file name (sans extension) if no heading is found.
 function _example_title(path::AbstractString)
     in_md = false
     for line in eachline(path)
@@ -54,6 +56,8 @@ function _example_title(path::AbstractString)
             occursin("md\"\"\"", s) && (in_md = true)
         elseif startswith(s, "# ")
             return strip(s[3:end])
+        elseif s == "\"\"\""
+            in_md = false   # standalone closing delimiter — md block ended without an H1
         end
     end
     return replace(basename(path), r"\.jl$" => "")
