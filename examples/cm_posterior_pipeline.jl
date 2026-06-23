@@ -151,7 +151,7 @@ function _cohortUQ(cm_a, cm_b)
 	d_cm = CMData(μ = μ_cm, σ = fill(noise_σ, length(t)), times = t)
 	prob = SMFitProblem(sm, d_cm, sm_prior)
 	fit  = fitSurrogate(prob, P0)
-	return SmoreBase._uq(prob, fit, plopts)
+	return quantifyUncertainty(prob, fit, plopts)
 end
 
 # ╔═╡ 0000000d-0000-0000-0000-000000000000
@@ -479,7 +479,7 @@ The full Smore pipeline now reads:
 | Step | Sub-package | Function |
 |------|-------------|----------|
 | 1–4  | SmoreBase | `SMFitProblem`, `fitSurrogate` |
-| 5    | SmoreBase | `SmoreBase._uq` (profile likelihood) |
+| 5    | SmoreBase | `quantifyUncertainty` (profile likelihood) |
 | 6    | SmoreBase | `sampleSMPredictions` |
 | 7    | SmoreGSA  | `runSensitivity` |
 | **8** | **SmoreFit** | **`buildPosterior`, `posteriorScore`, `inPosterior`** |

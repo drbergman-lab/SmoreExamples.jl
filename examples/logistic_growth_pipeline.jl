@@ -190,7 +190,7 @@ independently, so correlations are not captured.
 """
 
 # ╔═╡ 00000013-0000-0000-0000-000000000000
-uq = SmoreBase._uq(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+uq = quantifyUncertainty(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
 
 # ╔═╡ 0000002c-0000-0000-0000-000000000000
 plot(uq)
@@ -314,7 +314,7 @@ cohort:
 2. At each grid point, form the cohort's `CMData`. Here we generate it by
    evaluating the SM at the CM-true parameters; in a real workflow this is the
    CM's own output.
-3. `fitSurrogate` → `SMFitResult`, then `_uq` → `ProfileLikelihoodResult`.
+3. `fitSurrogate` → `SMFitResult`, then `quantifyUncertainty` → `ProfileLikelihoodResult`.
 
 Because the SM is analytic, all 15 fits take only a second or two. When the CM
 is genuinely expensive you would precompute and cache these per-cohort results,
@@ -329,7 +329,7 @@ function cohort_uq(cm_r, cm_K)
 	d = CMData(μ = μ, σ = fill(noise_σ, length(μ)), times = t_gsa)
 	p = SMFitProblem(sm, d, prior)
 	res = fitSurrogate(p, [cm_r cm_K])
-	return SmoreBase._uq(p, res, ProfileLikelihood(n_points = 15, confidence_level = 0.95))
+	return quantifyUncertainty(p, res, ProfileLikelihood(n_points = 15, confidence_level = 0.95))
 end
 
 # ╔═╡ 0000001d-0000-0000-0000-000000000000
