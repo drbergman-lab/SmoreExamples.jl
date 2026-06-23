@@ -9,7 +9,8 @@
 
 | File | What it covers |
 |------|---------------|
-| `logistic_growth_pipeline.jl` | End-to-end tour of `SmoreBase` (fit + profile-likelihood UQ + prediction sampling) and `SmoreGSA` (EFAST / Morris global sensitivity). |
+| `logistic_growth_pipeline.jl` | End-to-end tour of `SmoreBase` (fit + profile-likelihood UQ + prediction sampling) and `SmoreGSA` (EFAST / Morris global sensitivity) on a logistic-growth SM. |
+| `nonidentifiability.jl` | Logistic SM on a short, exponential-phase window where the carrying capacity is non-identifiable — flat profile likelihood and a fanning prediction envelope. |
 | `cm_posterior_pipeline.jl` | Step 8 of the pipeline using `SmoreFit`: build a posterior on CM parameters from real-world data, compare bridge methods, query interior CM points. |
 | `single_obs_custom_data.jl` | Define a custom `AbstractCMData` subtype for a single-observation + constant-CV noise model. |
 | `replicate_runs_custom_loss.jl` | Custom `AbstractCMData` that retains raw replicate runs, plus a custom MAE loss for robust fitting. |
