@@ -1,8 +1,17 @@
 ### A Pluto.jl notebook ###
-# v0.20.27
+# v1.0.1
 
 using Markdown
 using InteractiveUtils
+
+# ╔═╡ 00000002-0000-0000-0000-000000000000
+begin
+	using Smore
+	using Plots
+	using Distributions
+	using Random
+	using Statistics
+end
 
 # ╔═╡ 00000001-0000-0000-0000-000000000000
 # Launch via SmoreExamples.run_example(), or manually:
@@ -10,15 +19,6 @@ using InteractiveUtils
 #   using Pluto
 #   Pluto.run(notebook                   = "/path/to/logistic_growth_pipeline.jl",
 #             workspace_custom_startup_expr = "import Pkg; Pkg.activate(\"/path/to/SmoreExamples\"); Pkg.instantiate()")
-
-# ╔═╡ 00000002-0000-0000-0000-000000000000
-begin
-	using Smore
-	using CairoMakie
-	using Distributions
-	using Random
-	using Statistics
-end
 
 # ╔═╡ 00000003-0000-0000-0000-000000000000
 md"""
@@ -553,5 +553,3 @@ walk-through (bridge methods, accept/graded posteriors, interior queries).
 # ╠═00000028-0000-0000-0000-000000000000
 # ╠═0000002f-0000-0000-0000-000000000000
 # ╟─00000031-0000-0000-0000-000000000000
-# ╟─00000000-0000-0000-0000-000000000001
-# ╟─00000000-0000-0000-0000-000000000002

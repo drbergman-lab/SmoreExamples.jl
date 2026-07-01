@@ -1,8 +1,17 @@
 ### A Pluto.jl notebook ###
-# v0.20.27
+# v1.0.1
 
 using Markdown
 using InteractiveUtils
+
+# ╔═╡ 00000002-0000-0000-0000-000000000000
+begin
+	using Smore
+	using Plots
+	using Distributions
+	using Random
+	using Statistics
+end
 
 # ╔═╡ 00000001-0000-0000-0000-000000000000
 # Launch via SmoreExamples.run_example(), or manually:
@@ -10,15 +19,6 @@ using InteractiveUtils
 #   using Pluto
 #   Pluto.run(notebook                   = "/path/to/single_obs_custom_data.jl",
 #             workspace_custom_startup_expr = "import Pkg; Pkg.activate(\"/path/to/SmoreExamples\"); Pkg.instantiate()")
-
-# ╔═╡ 00000002-0000-0000-0000-000000000000
-begin
-	using Smore
-	using CairoMakie
-	using Distributions
-	using Random
-	using Statistics
-end
 
 # ╔═╡ 00000003-0000-0000-0000-000000000000
 md"""
@@ -192,14 +192,11 @@ let
 	obs_v   = vec(data.obs[:, 1, 1, 1])
 	σ_v     = data.cv .* abs.(obs_v)
 
-	fig = Figure()
-	ax  = Axis(fig[1, 1]; xlabel = "Time", ylabel = "Value",
+	plt = plot(; xlabel = "Time", ylabel = "Value",
 		title = "SM fit vs single CM observation")
-	errorbars!(ax, t, obs_v, σ_v; whiskerwidth = 6, color = :gray)
-	scatter!(ax, t, obs_v; label = "CM obs ± $(Int(round(data.cv * 100)))% CV")
-	lines!(ax, t, ŷ; linewidth = 2, label = "SM fit")
-	axislegend(ax)
-	fig
+	scatter!(plt, t, obs_v; yerror = σ_v, label = "CM obs ± $(Int(round(data.cv * 100)))% CV")
+	plot!(plt, t, ŷ; linewidth = 2, label = "SM fit")
+	plt
 end
 
 # ╔═╡ 00000016-0000-0000-0000-000000000000
@@ -300,5 +297,3 @@ where `cv` now holds an absolute noise level. All downstream code — `SMFitProb
 # ╠═0000001b-0000-0000-0000-000000000000
 # ╠═0000001c-0000-0000-0000-000000000000
 # ╟─0000001d-0000-0000-0000-000000000000
-# ╟─00000000-0000-0000-0000-000000000001
-# ╟─00000000-0000-0000-0000-000000000002

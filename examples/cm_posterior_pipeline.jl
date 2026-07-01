@@ -1,8 +1,14 @@
 ### A Pluto.jl notebook ###
-# v0.20.27
+# v1.0.1
 
 using Markdown
 using InteractiveUtils
+
+# ╔═╡ 00000002-0000-0000-0000-000000000000
+begin
+	using Smore
+	using Plots
+end
 
 # ╔═╡ 00000001-0000-0000-0000-000000000000
 # Launch via SmoreExamples.run_example("cm_posterior_pipeline.jl"), or manually:
@@ -10,12 +16,6 @@ using InteractiveUtils
 #   using Pluto
 #   Pluto.run(notebook                   = "/path/to/cm_posterior_pipeline.jl",
 #             workspace_custom_startup_expr = "import Pkg; Pkg.activate(\"/path/to/SmoreExamples\"); Pkg.instantiate()")
-
-# ╔═╡ 00000002-0000-0000-0000-000000000000
-begin
-	using Smore
-	using CairoMakie
-end
 
 # ╔═╡ 00000003-0000-0000-0000-000000000000
 md"""
@@ -245,40 +245,30 @@ true data-generating point.
 # ╔═╡ 00000017-0000-0000-0000-000000000000
 let
 	S = scoreGrid(post)
-	A = acceptedGrid(post)
 
-	fig = Figure(size = (640, 460))
-	ax  = Axis(fig[1, 1],
+	# heatmap(x, y, Z) in Plots indexes Z[row = y, col = x], so transpose scoreGrid.
+	plt = heatmap(cm_a_vals, cm_b_vals, S';
+		c = :viridis, colorbar_title = "score ∈ [0, 1]", size = (640, 460),
 		xlabel = "cm_a", ylabel = "cm_b",
-		title  = "Posterior score on the CM grid (:box_overlap)",
-	)
-	hm = heatmap!(ax, cm_a_vals, cm_b_vals, S; colormap = :viridis)
-	Colorbar(fig[1, 2], hm; label = "score ∈ [0, 1]")
+		title = "Posterior score on the CM grid (:box_overlap)", legend = :topright)
+
+	# All cohort points (small grey dots) to show grid layout.
+	scatter!(plt, cm_params[:, 1], cm_params[:, 2];
+		markercolor = :black, markeralpha = 0.25, markersize = 3, label = "")
 
 	# Accepted cohort points (white circles).
 	acc_idx = findall(post.accepted)
 	if !isempty(acc_idx)
-		scatter!(ax,
-			cm_params[acc_idx, 1], cm_params[acc_idx, 2];
-			color = :white, strokecolor = :black, strokewidth = 1.0, markersize = 12,
-			label = "accepted",
-		)
+		scatter!(plt, cm_params[acc_idx, 1], cm_params[acc_idx, 2];
+			markercolor = :white, markerstrokecolor = :black, markerstrokewidth = 1,
+			markersize = 6, label = "accepted")
 	end
 
-	# All cohort points (small grey dots) to show grid layout.
-	scatter!(ax,
-		cm_params[:, 1], cm_params[:, 2];
-		color = (:black, 0.25), markersize = 4,
-	)
-
 	# True data-generating CM point (red star).
-	scatter!(ax, [cm_a_true], [cm_b_true];
-		marker = :star5, color = :red, strokecolor = :black, strokewidth = 1.0,
-		markersize = 18, label = "data truth",
-	)
-
-	axislegend(ax; position = :rt)
-	fig
+	scatter!(plt, [cm_a_true], [cm_b_true];
+		marker = :star5, markercolor = :red, markerstrokecolor = :black,
+		markersize = 9, label = "data truth")
+	plt
 end
 
 # ╔═╡ 00000018-0000-0000-0000-000000000000
@@ -306,29 +296,23 @@ let
 		for b in bridges
 	]
 
-	fig = Figure(size = (1080, 380))
-	for (j, (b, pj)) in enumerate(zip(bridges, posts))
-		ax = Axis(fig[1, j],
-			xlabel = "cm_a", ylabel = "cm_b",
-			title  = "bridge = :$b   (n_acc = $(count(pj.accepted)))",
-		)
-		hm = heatmap!(ax, cm_a_vals, cm_b_vals, scoreGrid(pj);
-			colormap = :viridis, colorrange = (0.0, 1.0),
-		)
-		scatter!(ax, cm_params[:, 1], cm_params[:, 2]; color = (:black, 0.25), markersize = 4)
+	panels = map(zip(bridges, posts)) do (b, pj)
+		p = heatmap(cm_a_vals, cm_b_vals, scoreGrid(pj)';
+			c = :viridis, clims = (0.0, 1.0), colorbar_title = "score",
+			xlabel = "cm_a", ylabel = "cm_b", legend = false,
+			title = "bridge = :$b   (n_acc = $(count(pj.accepted)))")
+		scatter!(p, cm_params[:, 1], cm_params[:, 2];
+			markercolor = :black, markeralpha = 0.25, markersize = 3, label = "")
 		acc = findall(pj.accepted)
-		if !isempty(acc)
-			scatter!(ax, cm_params[acc, 1], cm_params[acc, 2];
-				color = :white, strokecolor = :black, strokewidth = 1.0, markersize = 10,
-			)
-		end
-		scatter!(ax, [cm_a_true], [cm_b_true];
-			marker = :star5, color = :red, strokecolor = :black, strokewidth = 1.0,
-			markersize = 16,
-		)
-		j == 3 && Colorbar(fig[1, 4], hm; label = "score")
+		isempty(acc) || scatter!(p, cm_params[acc, 1], cm_params[acc, 2];
+			markercolor = :white, markerstrokecolor = :black, markerstrokewidth = 1,
+			markersize = 5, label = "")
+		scatter!(p, [cm_a_true], [cm_b_true];
+			marker = :star5, markercolor = :red, markerstrokecolor = :black,
+			markersize = 8, label = "")
+		p
 	end
-	fig
+	plot(panels...; layout = (1, 3), size = (1080, 380))
 end
 
 # ╔═╡ 0000001a-0000-0000-0000-000000000000
@@ -365,18 +349,15 @@ post_graded = buildPosterior(sm, data, uq_results, cm_sample, cm_prior;
 let
 	w  = posteriorWeights(post_graded)
 	W  = reshapeToGrid(post_graded.cm_sample, w)
-	fig = Figure(size = (640, 460))
-	ax  = Axis(fig[1, 1],
-		xlabel = "cm_a", ylabel = "cm_b",
-		title  = "Graded posterior weights  (Σ = $(round(sum(w); digits=4)))",
-	)
-	hm = heatmap!(ax, cm_a_vals, cm_b_vals, W; colormap = :viridis)
-	Colorbar(fig[1, 2], hm; label = "weight")
-	scatter!(ax, cm_params[:, 1], cm_params[:, 2]; color = (:black, 0.25), markersize = 4)
-	scatter!(ax, [cm_a_true], [cm_b_true];
-		marker = :star5, color = :red, strokecolor = :black, strokewidth = 1.0, markersize = 18,
-	)
-	fig
+	plt = heatmap(cm_a_vals, cm_b_vals, W';
+		c = :viridis, colorbar_title = "weight", size = (640, 460),
+		xlabel = "cm_a", ylabel = "cm_b", legend = false,
+		title = "Graded posterior weights  (Σ = $(round(sum(w); digits=4)))")
+	scatter!(plt, cm_params[:, 1], cm_params[:, 2];
+		markercolor = :black, markeralpha = 0.25, markersize = 3, label = "")
+	scatter!(plt, [cm_a_true], [cm_b_true];
+		marker = :star5, markercolor = :red, markerstrokecolor = :black, markersize = 9, label = "")
+	plt
 end
 
 # ╔═╡ 0000001e-0000-0000-0000-000000000000
@@ -412,25 +393,17 @@ let
 	scores_fine = posteriorScore(post, queries)
 	S_fine = reshape(scores_fine, length(a_fine), length(b_fine))
 
-	fig = Figure(size = (700, 480))
-	ax  = Axis(fig[1, 1],
-		xlabel = "cm_a", ylabel = "cm_b",
-		title  = "Interior posterior score (40 × 40 fine grid)",
-	)
-	hm = heatmap!(ax, a_fine, b_fine, S_fine;
-		colormap = :viridis, colorrange = (0.0, 1.0),
-	)
-	Colorbar(fig[1, 2], hm; label = "score")
-	scatter!(ax, cm_params[:, 1], cm_params[:, 2];
-		color = :white, strokecolor = :black, strokewidth = 0.5, markersize = 5,
-		label = "cohort",
-	)
-	scatter!(ax, [cm_a_true], [cm_b_true];
-		marker = :star5, color = :red, strokecolor = :black, strokewidth = 1.0,
-		markersize = 18, label = "data truth",
-	)
-	axislegend(ax; position = :rt)
-	fig
+	plt = heatmap(a_fine, b_fine, S_fine';
+		c = :viridis, clims = (0.0, 1.0), colorbar_title = "score", size = (700, 480),
+		xlabel = "cm_a", ylabel = "cm_b", legend = :topright,
+		title = "Interior posterior score (40 × 40 fine grid)")
+	scatter!(plt, cm_params[:, 1], cm_params[:, 2];
+		markercolor = :white, markerstrokecolor = :black, markerstrokewidth = 0.5,
+		markersize = 3, label = "cohort")
+	scatter!(plt, [cm_a_true], [cm_b_true];
+		marker = :star5, markercolor = :red, markerstrokecolor = :black,
+		markersize = 9, label = "data truth")
+	plt
 end
 
 # ╔═╡ 00000020-0000-0000-0000-000000000000
@@ -546,5 +519,3 @@ Same upstream cost, two complementary downstream answers.
 # ╟─00000022-0000-0000-0000-000000000000
 # ╠═00000023-0000-0000-0000-000000000000
 # ╟─00000024-0000-0000-0000-000000000000
-# ╟─00000000-0000-0000-0000-000000000001
-# ╟─00000000-0000-0000-0000-000000000002

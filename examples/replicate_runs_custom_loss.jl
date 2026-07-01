@@ -1,8 +1,17 @@
 ### A Pluto.jl notebook ###
-# v0.20.27
+# v1.0.1
 
 using Markdown
 using InteractiveUtils
+
+# ╔═╡ 00000002-0000-0000-0000-000000000000
+begin
+	using Smore
+	using Plots
+	using Distributions
+	using Random
+	using Statistics
+end
 
 # ╔═╡ 00000001-0000-0000-0000-000000000000
 # Launch via SmoreExamples.run_example(), or manually:
@@ -10,15 +19,6 @@ using InteractiveUtils
 #   using Pluto
 #   Pluto.run(notebook                   = "/path/to/replicate_runs_custom_loss.jl",
 #             workspace_custom_startup_expr = "import Pkg; Pkg.activate(\"/path/to/SmoreExamples\"); Pkg.instantiate()")
-
-# ╔═╡ 00000002-0000-0000-0000-000000000000
-begin
-	using Smore
-	using CairoMakie
-	using Distributions
-	using Random
-	using Statistics
-end
 
 # ╔═╡ 00000003-0000-0000-0000-000000000000
 md"""
@@ -153,16 +153,14 @@ Replicate $R is the runaway outlier.
 
 # ╔═╡ 0000000f-0000-0000-0000-000000000000
 let
-	fig = Figure()
-	ax  = Axis(fig[1, 1]; xlabel = "Time", ylabel = "Value",
+	plt = plot(; xlabel = "Time", ylabel = "Value",
 		title = "Raw replicate runs (run $R is the outlier)")
 	for r in 1:(R - 1)
-		lines!(ax, t, runs[:, 1, r, 1, 1]; color = (:steelblue, 0.4), linewidth = 1)
+		plot!(plt, t, runs[:, 1, r, 1, 1]; color = :steelblue, linealpha = 0.4, linewidth = 1, label = "")
 	end
-	lines!(ax, t, runs[:, 1, R, 1, 1]; color = :red, linewidth = 2, label = "Outlier run $R")
-	lines!(ax, t, obs_true; color = :black, linewidth = 2, linestyle = :dash, label = "True trajectory")
-	axislegend(ax)
-	fig
+	plot!(plt, t, runs[:, 1, R, 1, 1]; color = :red, linewidth = 2, label = "Outlier run $R")
+	plot!(plt, t, obs_true; color = :black, linewidth = 2, linestyle = :dash, label = "True trajectory")
+	plt
 end
 
 # ╔═╡ 00000010-0000-0000-0000-000000000000
@@ -246,23 +244,21 @@ let
 	ŷ_mse     = vec(logistic(t_fine, result_mse.parameters[1, :], nothing))
 	ŷ_true    = vec(logistic(t_fine, p_true, nothing))
 
-	fig = Figure()
-	ax  = Axis(fig[1, 1]; xlabel = "Time", ylabel = "Value",
-		title = "MAE vs MSE fit (one outlier replicate)")
+	plt = plot(; xlabel = "Time", ylabel = "Value",
+		title = "MAE vs MSE fit (one outlier replicate)", legend = :topleft)
 	for r in 1:(R - 1)
-		lines!(ax, t, runs[:, 1, r, 1, 1];
-			color = (:steelblue, 0.3), linewidth = 1)
+		plot!(plt, t, runs[:, 1, r, 1, 1];
+			color = :steelblue, linealpha = 0.3, linewidth = 1, label = "")
 	end
-	lines!(ax, t, runs[:, 1, R, 1, 1];
+	plot!(plt, t, runs[:, 1, R, 1, 1];
 		color = :red, linewidth = 2, label = "Outlier run")
-	lines!(ax, t_fine, ŷ_true;
+	plot!(plt, t_fine, ŷ_true;
 		color = :black, linewidth = 2, linestyle = :dash, label = "True")
-	lines!(ax, t_fine, ŷ_mae;
+	plot!(plt, t_fine, ŷ_mae;
 		color = :green, linewidth = 2, label = "MAE fit (robust)")
-	lines!(ax, t_fine, ŷ_mse;
+	plot!(plt, t_fine, ŷ_mse;
 		color = :orange, linewidth = 2, label = "MSE fit (pulled by outlier)")
-	axislegend(ax; position = :lt)
-	fig
+	plt
 end
 
 # ╔═╡ 00000019-0000-0000-0000-000000000000
@@ -275,8 +271,8 @@ can compare confidence intervals.
 
 # ╔═╡ 0000001a-0000-0000-0000-000000000000
 begin
-	uq_mae = SmoreBase._uq(prob_mae, result_mae, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
-	uq_mse = SmoreBase._uq(prob_mse, result_mse, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+	uq_mae = quantifyUncertainty(prob_mae, result_mae, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+	uq_mse = quantifyUncertainty(prob_mse, result_mse, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
 end
 
 # ╔═╡ 0000001b-0000-0000-0000-000000000000
@@ -373,5 +369,3 @@ All downstream code — profile likelihood, prediction sampling — works unchan
 # ╠═0000001e-0000-0000-0000-000000000000
 # ╠═0000001f-0000-0000-0000-000000000000
 # ╟─00000020-0000-0000-0000-000000000000
-# ╟─00000000-0000-0000-0000-000000000001
-# ╟─00000000-0000-0000-0000-000000000002

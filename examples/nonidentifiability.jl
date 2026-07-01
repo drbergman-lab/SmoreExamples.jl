@@ -1,8 +1,17 @@
 ### A Pluto.jl notebook ###
-# v0.20.27
+# v1.0.1
 
 using Markdown
 using InteractiveUtils
+
+# ╔═╡ 00000002-0000-0000-0000-000000000000
+begin
+	using Smore
+	using Plots
+	using Distributions
+	using Random
+	using Statistics
+end
 
 # ╔═╡ 00000001-0000-0000-0000-000000000000
 # Launch via SmoreExamples.run_example("nonidentifiability.jl"), or manually:
@@ -10,15 +19,6 @@ using InteractiveUtils
 #   using Pluto
 #   Pluto.run(notebook                   = "/path/to/nonidentifiability.jl",
 #             workspace_custom_startup_expr = "import Pkg; Pkg.activate(\"/path/to/SmoreExamples\"); Pkg.instantiate()")
-
-# ╔═╡ 00000002-0000-0000-0000-000000000000
-begin
-	using Smore
-	using CairoMakie
-	using Distributions
-	using Random
-	using Statistics
-end
 
 # ╔═╡ 00000003-0000-0000-0000-000000000000
 md"""
@@ -38,9 +38,10 @@ but observes it on a **short time window confined to the early, exponential
 phase**. There the carrying capacity $K$ is never "felt", so the growth rate $r$
 is well identified while $K$ is not.
 
-The full-window companion, [`logistic_growth_pipeline.jl`](./logistic_growth_pipeline.jl),
-runs the *same* model out to saturation, where both parameters are identifiable —
-compare the profile-likelihood and prediction-envelope sections side by side.
+The full-window companion, `logistic_growth_pipeline.jl` (open it with
+`SmoreExamples.run_example("logistic_growth_pipeline.jl")`), runs the *same*
+model out to saturation, where both parameters are identifiable — compare the
+profile-likelihood and prediction-envelope sections side by side.
 """
 
 # ╔═╡ 00000004-0000-0000-0000-000000000000
@@ -131,7 +132,7 @@ returned CI bound is `nothing`.
 """
 
 # ╔═╡ 00000010-0000-0000-0000-000000000000
-uq = SmoreBase._uq(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+uq = quantifyUncertainty(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
 
 # ╔═╡ 00000011-0000-0000-0000-000000000000
 plot(uq)
@@ -154,7 +155,7 @@ $(join(rows, "\n"))
 `r` has a finite CI — it is pinned down by the exponential-phase data. `K` does
 not: its profile is flat across the prior, so the data place no bound on the
 carrying capacity. Extend the window through saturation (as in
-[`logistic_growth_pipeline.jl`](./logistic_growth_pipeline.jl)) and `K`'s CI
+`logistic_growth_pipeline.jl`) and `K`'s CI
 becomes finite.
 """)
 end
@@ -219,7 +220,7 @@ Next: see [`cm_posterior_pipeline.jl`](./cm_posterior_pipeline.jl), which uses
 # ╟─0000000f-0000-0000-0000-000000000000
 # ╠═00000010-0000-0000-0000-000000000000
 # ╠═00000011-0000-0000-0000-000000000000
-# ╠═00000012-0000-0000-0000-000000000000
+# ╟─00000012-0000-0000-0000-000000000000
 # ╟─00000013-0000-0000-0000-000000000000
 # ╠═00000014-0000-0000-0000-000000000000
 # ╠═00000015-0000-0000-0000-000000000000
