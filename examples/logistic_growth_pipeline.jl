@@ -384,7 +384,7 @@ Section 7c.
 begin
 	rng_efast    = Random.MersenneTwister(42)
 	result_efast = runSensitivity(
-		sm_gsa, uq_list, cm_sample, cm_prior, EFAST(n_samples = 100);
+		EFAST(n_samples = 100), sm_gsa, uq_list, cm_sample, cm_prior;
 		times = t_gsa,
 		rng   = rng_efast,
 	)
@@ -421,7 +421,7 @@ full EFAST run.
 begin
 	rng_morris    = Random.MersenneTwister(7)
 	result_morris = runSensitivity(
-		sm_gsa, uq_list, cm_sample, cm_prior, Morris(num_trajectory = 10);
+		Morris(num_trajectory = 10), sm_gsa, uq_list, cm_sample, cm_prior;
 		times = t_gsa,
 		rng   = rng_morris,
 	)
@@ -463,7 +463,7 @@ end
 begin
 	rng_custom    = Random.MersenneTwister(99)
 	result_custom = runSensitivity(
-		sm_gsa, uq_list, cm_sample, cm_prior, EFAST(n_samples = 100);
+		EFAST(n_samples = 100), sm_gsa, uq_list, cm_sample, cm_prior;
 		times    = t_gsa,
 		outputFn = two_outputs,
 		rng      = rng_custom,
