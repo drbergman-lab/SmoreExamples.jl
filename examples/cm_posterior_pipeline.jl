@@ -28,28 +28,28 @@ This notebook is **Step 8** of the SmoreVerse pipeline. The earlier
 - Step 7 (`SmoreGSA`): global sensitivity of SM outputs to CM parameters.
 
 The piece still missing is the *inverse* problem: given **real-world data** and
-the SM you already fit per cohort, *which CM parameter sets are consistent with
+the SM you already fit per CM param_set, *which CM parameter sets are consistent with
 that data?* That is what `SmoreFit` answers.
 
 ## The trick
 
-You already have a profile likelihood per cohort point — the SM-parameter
-confidence region induced by the CM running at each cohort point. SmoreFit
+You already have a profile likelihood per CM param_set — the SM-parameter
+confidence region induced by the CM running at each one. SmoreFit
 profiles the same SM against the **real** observations to get a *data-side*
-SM-parameter confidence region in the same space. A cohort point is in the
+SM-parameter confidence region in the same space. A CM param_set is in the
 posterior iff its SM region overlaps the data's. Both sides live in
 SM-parameter space, so we can compare them directly — no MCMC, no likelihood
 evaluation of the CM, no expensive forward simulations.
 
 This notebook walks through:
 
-1. Build a CM cohort + **real** profile-likelihood UQ at every cohort point.
+1. Build a set of CM param_sets + **real** profile-likelihood UQ at every one.
 2. Generate synthetic observational data at an interior CM point.
 3. `buildPosterior(...)` and inspect the result.
 4. Visualize the posterior on the CM grid.
 5. Compare the three bridge methods.
 6. Switch to the graded posterior.
-7. Query interior CM points off the cohort grid.
+7. Query interior CM points off the CM param_set grid.
 """
 
 # ╔═╡ 00000004-0000-0000-0000-000000000000
@@ -81,10 +81,10 @@ t = collect(range(0.0, 5.0, 12))
 
 # ╔═╡ 00000007-0000-0000-0000-000000000000
 md"""
-## 2  Cohort UQ — the upstream input
+## 2  CM param_set UQ — the upstream input
 
-The CM cohort is a 6 × 6 Cartesian grid over $(\text{cm\_a}, \text{cm\_b})$.
-At each cohort point we:
+The CM param_sets form a 6 × 6 Cartesian grid over $(\text{cm\_a}, \text{cm\_b})$.
+At each one we:
 
 1. Run the CM (here: simulate by evaluating the SM at the CM-true parameters).
 2. Fit the SM to the resulting CMData → `SMFitResult`.
@@ -94,13 +94,13 @@ Unlike the synthetic flat profiles used in Step 7 (which were appropriate for
 demonstrating the GSA *machinery* without committing to CM execution),
 SmoreFit's bridges need realistic profile shapes — the CI widths, not just the
 midpoints, drive the answer. So this notebook does the full fit + UQ at every
-cohort point. With 25 points and a closed-form SM it still takes only a
+CM param_set. With 25 points and a closed-form SM it still takes only a
 moment.
 
 The data-side noise level (`σ = 0.2`) is large enough that the resulting
-SM-parameter CIs span the gaps between cohort points — without that, the
-"cohort sampling density" caveat below would trigger and most cohort points
-would score zero. In a real workflow, cohort density should be chosen against
+SM-parameter CIs span the gaps between CM param_sets — without that, the
+"CM param_set sampling density" caveat below would trigger and most CM param_sets
+would score zero. In a real workflow, CM param_set density should be chosen against
 the SM-parameter CI widths the CM noise produces.
 """
 
@@ -114,8 +114,7 @@ begin
 	cm_as     = repeat(cm_a_vals; inner = length(cm_b_vals))
 	cm_bs     = repeat(cm_b_vals; outer = length(cm_a_vals))
 	cm_params = [cm_as cm_bs]
-	cm_sample = GridCMSample(cm_params)
-	cm_prior  = ParameterPrior([1.0, 0.2], [5.0, 0.8]; names = ["cm_a", "cm_b"])
+	cm_sample = GridCMSample(cm_params; names = ["cm_a", "cm_b"])
 end
 
 # ╔═╡ 00000009-0000-0000-0000-000000000000
@@ -123,39 +122,43 @@ md"""
 ### SM-side prior, fit, and profile-likelihood settings
 
 The SM prior must encompass the entire CM-side range of $(a, b)$ since the SM
-will be fit at every cohort point. We give it some slack on both sides.
+will be fit at every CM param_set. We give it some slack on both sides.
 """
 
 # ╔═╡ 0000000a-0000-0000-0000-000000000000
 begin
 	sm_prior = ParameterPrior([0.5, 0.1], [6.0, 1.0]; names = ["a", "b"])
-	P0       = [3.0 0.5]
+	P0       = [3.0, 0.5]   # single shared guess, broadcast to every CM param_set below
 	noise_σ  = 0.2
 	plopts   = ProfileLikelihood(n_points = 15, confidence_level = 0.95)
 end
 
 # ╔═╡ 0000000b-0000-0000-0000-000000000000
 md"""
-### Build the cohort
+### Build the CM param_sets
 
-Each cohort point: evaluate the CM (here, the SM at the CM-true $(a, b)$),
-wrap as `CMData`, fit, and profile. The resulting `uq_results` vector is
-**row-aligned** with `cm_sample.params` — `uq_results[i]` is the profile at
-`cm_sample.params[i, :]`. This is the same upstream convention SmoreGSA uses.
+One `CMData` holds all 36 CM param_sets at once (its `cm_param_sets` axis), so
+fitting them is a single `fitSurrogate` call — passing `P0` as a plain vector
+broadcasts that one shared guess to every CM param_set's row internally —
+followed by a single `quantifyUncertainty` call with no explicit index — the
+resulting `Vector{ProfileLikelihoodResult}` is **row-aligned** with
+`cm_sample.params` (`uq_results[i]` is the profile at `cm_sample.params[i, :]`)
+with no per-point loop required. This is the same upstream convention
+SmoreGSA uses.
 """
 
 # ╔═╡ 0000000c-0000-0000-0000-000000000000
-function _cohortUQ(cm_a, cm_b)
-	# CM "run": evaluate the SM at the CM-true parameters and add Gaussian noise structure.
-	μ_cm = vec(SmoreBase._evaluate(sm, t, [cm_a, cm_b], "default"))
-	d_cm = CMData(μ = μ_cm, σ = fill(noise_σ, length(t)), times = t)
-	prob = SMFitProblem(sm, d_cm, sm_prior)
-	fit  = fitSurrogate(prob, P0)
-	return quantifyUncertainty(prob, fit, plopts)
+begin
+	# CM "run" for every CM param_set: evaluate the SM at each one's CM-true parameters.
+	n_ps = size(cm_params, 1)
+	μ_cm_param_sets = reduce(hcat, [vec(SmoreBase._evaluate(sm, t, cm_params[i, :], "default")) for i in 1:n_ps])
+	d_cm_param_sets = CMData(μ = μ_cm_param_sets, σ = fill(noise_σ, size(μ_cm_param_sets)), times = t, cm_param_sets = n_ps)
+	prob_cm_param_sets = SMFitProblem(sm, d_cm_param_sets, sm_prior)
+	fit_cm_param_sets  = fitSurrogate(prob_cm_param_sets, P0)   # vector P0 broadcasts the shared guess to every row
 end
 
 # ╔═╡ 0000000d-0000-0000-0000-000000000000
-uq_results = [_cohortUQ(cm_params[i, 1], cm_params[i, 2]) for i in 1:size(cm_params, 1)]
+uq_results = quantifyUncertainty(plopts, prob_cm_param_sets, fit_cm_param_sets)
 
 # ╔═╡ 0000000e-0000-0000-0000-000000000000
 md"""
@@ -163,9 +166,9 @@ md"""
 
 In a real workflow this is whatever measurement system produced your data.
 For this tutorial we generate it at a known CM point that is **between**
-cohort grid points — `(cm_a*, cm_b*) = (2.7, 0.45)` — so we can visualize how
-the cohort points around it score and check that the highest-scoring cohort
-points really are the closest. The data-side noise level matches the cohort
+CM param_set grid points — `(cm_a*, cm_b*) = (2.7, 0.45)` — so we can visualize how
+the CM param_sets around it score and check that the highest-scoring ones
+really are the closest. The data-side noise level matches the CM param_sets
 (`σ = 0.2`).
 """
 
@@ -188,18 +191,18 @@ equivalent. The defaults are `bridge = :box_overlap`, `posterior = :accept`,
 """
 
 # ╔═╡ 00000011-0000-0000-0000-000000000000
-post = buildPosterior(sm, data, uq_results, cm_sample, cm_prior)
+post = buildPosterior(sm, data, uq_results, cm_sample)
 
 # ╔═╡ 00000012-0000-0000-0000-000000000000
 md"""
 ### The result
 
-`CMPosteriorResult` holds: the per-cohort `scores` (in `[0,1]`), an `accepted`
+`CMPosteriorResult` holds: the per-CM-param_set `scores` (in `[0,1]`), an `accepted`
 `BitVector`, the bridge + posterior choice, the `data_profiles` (SM profile
-against the real data), the cohort `uq_results`, and an interpolator over the
+against the real data), the CM param_sets' `uq_results`, and an interpolator over the
 CM grid for interior queries.
 
-For a `GridCMSample` cohort, `acceptedGrid` and `scoreGrid` reshape the result
+For a `GridCMSample` of CM param_sets, `acceptedGrid` and `scoreGrid` reshape the result
 back onto the grid axes — handy for heatmaps.
 """
 
@@ -210,9 +213,9 @@ let
 	Markdown.parse("""
 **Summary**
 
-- Cohort size: $(length(post.scores)) points
+- CM param_set count: $(length(post.scores)) points
 - Accepted: $(n_acc) ($(round(100 * n_acc / length(post.scores); digits=1))%)
-- Top-scoring cohort: index $(top_idx) → `cm_a = $(cm_params[top_idx, 1])`, `cm_b = $(cm_params[top_idx, 2])` (score = $(round(post.scores[top_idx]; digits=4)))
+- Top-scoring CM param_set: index $(top_idx) → `cm_a = $(cm_params[top_idx, 1])`, `cm_b = $(cm_params[top_idx, 2])` (score = $(round(post.scores[top_idx]; digits=4)))
 - True data-generating CM point: `(cm_a*, cm_b*) = ($(cm_a_true), $(cm_b_true))`
 """)
 end
@@ -228,7 +231,7 @@ loss with another part of the pipeline), pass it directly:
 # ╔═╡ 00000015-0000-0000-0000-000000000000
 let
 	problem = SMFitProblem(sm, data, sm_prior)
-	post_p  = buildPosterior(problem, uq_results, cm_sample, cm_prior)
+	post_p  = buildPosterior(problem, uq_results, cm_sample)
 	(scores_match = post_p.scores ≈ post.scores,
 	 accepted_match = post_p.accepted == post.accepted)
 end
@@ -238,7 +241,7 @@ md"""
 ## 5  Visualize the Posterior on the CM Grid
 
 `scoreGrid` reshapes `scores` to size `length.(cm_sample.axes)` so it plots
-directly as a heatmap. Overlay markers for accepted cohort points and the
+directly as a heatmap. Overlay markers for accepted CM param_sets and the
 true data-generating point.
 """
 
@@ -252,11 +255,11 @@ let
 		xlabel = "cm_a", ylabel = "cm_b",
 		title = "Posterior score on the CM grid (:box_overlap)", legend = :topright)
 
-	# All cohort points (small grey dots) to show grid layout.
+	# All CM param_sets (small grey dots) to show grid layout.
 	scatter!(plt, cm_params[:, 1], cm_params[:, 2];
 		markercolor = :black, markeralpha = 0.25, markersize = 3, label = "")
 
-	# Accepted cohort points (white circles).
+	# Accepted CM param_sets (white circles).
 	acc_idx = findall(post.accepted)
 	if !isempty(acc_idx)
 		scatter!(plt, cm_params[acc_idx, 1], cm_params[acc_idx, 2];
@@ -285,14 +288,14 @@ The bridge picks how the two SM-parameter confidence regions are compared:
 
 `:box_overlap` is symmetric and cheap; the trace methods give more nuanced
 overlap on regions where the profile shape (not just its CI edges) carries
-information. Below: all three bridges side by side on the same cohort.
+information. Below: all three bridges side by side on the same CM param_sets.
 """
 
 # ╔═╡ 00000019-0000-0000-0000-000000000000
 let
 	bridges = (:box_overlap, :data_trace_in_box, :symmetric_trace)
 	posts   = [
-		buildPosterior(sm, data, uq_results, cm_sample, cm_prior; bridge = b)
+		buildPosterior(sm, data, uq_results, cm_sample; bridge = b)
 		for b in bridges
 	]
 
@@ -323,8 +326,8 @@ All three bridges agree on the high-score region near the true CM point — that
 robustness is the value-add of having three options agree. They disagree on
 the *shape* of the falloff: `:box_overlap` penalizes mismatched CI widths
 geometrically, while `:data_trace_in_box` is asymmetric (it asks only whether
-the data sits inside the cohort box, regardless of how big that box is). If
-two bridges disagree about whether a cohort point should be accepted, that
+the data sits inside the CM param_set's box, regardless of how big that box is). If
+two bridges disagree about whether a CM param_set should be accepted, that
 point is *boundary* in the SM-parameter space sense — worth flagging for
 follow-up rather than trusting either answer.
 """
@@ -333,15 +336,15 @@ follow-up rather than trusting either answer.
 md"""
 ## 7  Graded Posterior
 
-`posterior = :graded` keeps the per-cohort scores as a continuous weight
+`posterior = :graded` keeps the per-CM-param_set scores as a continuous weight
 rather than thresholding to accept/reject. `posteriorWeights` normalizes them
-to a discrete distribution over cohort points — useful when you want to keep
+to a discrete distribution over CM param_sets — useful when you want to keep
 the relative confidence information for downstream uses (importance-weighted
 expectations, etc.).
 """
 
 # ╔═╡ 0000001c-0000-0000-0000-000000000000
-post_graded = buildPosterior(sm, data, uq_results, cm_sample, cm_prior;
+post_graded = buildPosterior(sm, data, uq_results, cm_sample;
 	posterior = :graded,
 )
 
@@ -364,10 +367,10 @@ end
 md"""
 ## 8  Interior Queries
 
-The cohort is sparse. To evaluate the posterior at a CM point not on the
-cohort grid — for visualization, refinement, or downstream sampling —
+The CM param_sets are sparse. To evaluate the posterior at a CM point not among
+them — for visualization, refinement, or downstream sampling —
 `posteriorScore(post, θ_cm)` and `inPosterior(post, θ_cm)` interpolate the
-per-cohort SM-parameter CI bounds across the CM grid and re-run the bridge
+per-CM-param_set SM-parameter CI bounds across the CM grid and re-run the bridge
 against the data-side profile at the interpolated box. No new SM fits are
 done.
 
@@ -375,11 +378,11 @@ Below: evaluate `posteriorScore` on a fine grid in CM space (40 × 40 ≈
 1600 queries) and visualize.
 
 > **Caveat.** Linear bound interpolation is only reliable when consecutive
-> cohort CIs overlap each other in SM-parameter space. If the CIs are tight
-> relative to how much the bound surface moves between cohort points, interior
-> queries can drop to zero near boundaries even close to a cohort point that
-> *is* in the posterior. The fix is to add cohort points where the geometry
-> changes fast — see the SmoreFit README "cohort sampling density" note.
+> CM param_sets' CIs overlap each other in SM-parameter space. If the CIs are tight
+> relative to how much the bound surface moves between CM param_sets, interior
+> queries can drop to zero near boundaries even close to a CM param_set that
+> *is* in the posterior. The fix is to add CM param_sets where the geometry
+> changes fast — see the SmoreFit README "CM param_set sampling density" note.
 """
 
 # ╔═╡ 0000001f-0000-0000-0000-000000000000
@@ -399,7 +402,7 @@ let
 		title = "Interior posterior score (40 × 40 fine grid)")
 	scatter!(plt, cm_params[:, 1], cm_params[:, 2];
 		markercolor = :white, markerstrokecolor = :black, markerstrokewidth = 0.5,
-		markersize = 3, label = "cohort")
+		markersize = 3, label = "CM param_sets")
 	scatter!(plt, [cm_a_true], [cm_b_true];
 		marker = :star5, markercolor = :red, markerstrokecolor = :black,
 		markersize = 9, label = "data truth")
@@ -457,7 +460,7 @@ The full Smore pipeline now reads:
 | 7    | SmoreGSA  | `runSensitivity` |
 | **8** | **SmoreFit** | **`buildPosterior`, `posteriorScore`, `inPosterior`** |
 
-The shared backbone is the per-cohort `ProfileLikelihoodResult`. Once that's
+The shared backbone is the per-CM-param_set `ProfileLikelihoodResult`. Once that's
 in hand:
 
 - **SmoreGSA** treats those profiles as the *uncertainty envelope* and asks
@@ -472,11 +475,11 @@ Same upstream cost, two complementary downstream answers.
 ### Try it yourself
 
 - Move `(cm_a_true, cm_b_true)` to a corner of CM space — how does the
-  posterior shape change? What happens when the truth sits outside the cohort
+  posterior shape change? What happens when the truth sits outside the CM param_set
   grid entirely?
-- Reduce the cohort grid to 3 × 3 — does the interior-query interpolation
+- Reduce the CM param_set grid to 3 × 3 — does the interior-query interpolation
   still work? Where does it break?
-- Change `noise_σ` on the data side only (leave the cohort noise alone) —
+- Change `noise_σ` on the data side only (leave the CM param_sets' noise alone) —
   what happens to the size of the posterior?
 - Try `bridge = :data_trace_in_box` with `posterior = :graded` and compare
   the weight distribution to `:box_overlap`.

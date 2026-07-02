@@ -78,13 +78,13 @@ md"""
 Three pieces are needed:
 
 1. **`ReplicateCMData`** — stores a 5-D array of raw runs with axes
-   `[n_times, n_variables, n_replicates, n_conditions, n_param_sets]`.
+   `[n_times, n_variables, n_replicates, n_conditions, n_cm_param_sets]`.
    Replicates (dim 3) sit adjacent to the per-run data; conditions (dim 4)
    and param sets (dim 5) are the outer experimental axes.
 
 2. **`ReplicateCMDataSlice`** — a single-parameter-set view of the runs.
 
-3. **`_sliceParamSet`** — drops the `n_param_sets` dimension with `@view`,
+3. **`_sliceCmParamSet`** — drops the `n_cm_param_sets` dimension with `@view`,
    returning a `ReplicateCMDataSlice`.
 
 The loss function is separate from the type — it's a plain Julia function
@@ -94,7 +94,7 @@ or median → trimmed mean) without changing the data type.
 
 # ╔═╡ 00000009-0000-0000-0000-000000000000
 struct ReplicateCMData <: AbstractCMData
-	runs::Array{Float64,5}                 # [n_times, n_variables, n_replicates, n_conditions, n_param_sets]
+	runs::Array{Float64,5}                 # [n_times, n_variables, n_replicates, n_conditions, n_cm_param_sets]
 	times::Union{Nothing,Vector{Float64}}
 end
 
@@ -106,7 +106,7 @@ end
 
 # ╔═╡ 0000000b-0000-0000-0000-000000000000
 begin
-	function SmoreBase._sliceParamSet(data::ReplicateCMData, pi::Int)
+	function SmoreBase._sliceCmParamSet(data::ReplicateCMData, pi::Int)
 		ReplicateCMDataSlice(@view(data.runs[:, :, :, :, pi]), data.times)
 	end
 
@@ -114,7 +114,7 @@ begin
 	SmoreBase._times(d::ReplicateCMDataSlice) = d.times
 
 	# Required by fitSurrogate for P0 validation
-	SmoreBase.n_param_sets(d::ReplicateCMData) = size(d.runs, 5)
+	SmoreBase.n_cm_param_sets(d::ReplicateCMData) = size(d.runs, 5)
 end
 
 # ╔═╡ 0000000c-0000-0000-0000-000000000000
@@ -271,8 +271,8 @@ can compare confidence intervals.
 
 # ╔═╡ 0000001a-0000-0000-0000-000000000000
 begin
-	uq_mae = quantifyUncertainty(prob_mae, result_mae, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
-	uq_mse = quantifyUncertainty(prob_mse, result_mse, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+	uq_mae = quantifyUncertainty(ProfileLikelihood(n_points = 25, confidence_level = 0.95), prob_mae, result_mae, 1)
+	uq_mse = quantifyUncertainty(ProfileLikelihood(n_points = 25, confidence_level = 0.95), prob_mse, result_mse, 1)
 end
 
 # ╔═╡ 0000001b-0000-0000-0000-000000000000
@@ -324,7 +324,7 @@ md"""
 To use `ReplicateCMData` with your own CM output:
 
 1. Replace the `runs` array with your replicate trajectories, shaped
-   `[n_times, n_variables, n_replicates, n_conditions, n_param_sets]`.
+   `[n_times, n_variables, n_replicates, n_conditions, n_cm_param_sets]`.
 2. Choose or define a loss function:
    - `replicate_mae` — robust to outliers, fits the median run.
    - `replicate_mse` — fits the mean run; equivalent to using `CMData` + `GaussianNLL`

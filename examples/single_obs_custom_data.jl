@@ -82,14 +82,14 @@ We need three pieces:
 2. **`SingleObsCMDataSlice`** — a single-parameter-set view, subtype of
    `AbstractCMDataSlice`. Slices are what the fitting loop actually sees.
 
-3. **Interface methods** — `_sliceParamSet` tells SmoreBase how to cut the
+3. **Interface methods** — `_sliceCmParamSet` tells SmoreBase how to cut the
    container down to one parameter set; `_mean`, `_sd`, and `_cov` tell the
    default `GaussianNLL` loss where to find each quantity.
 """
 
 # ╔═╡ 00000009-0000-0000-0000-000000000000
 struct SingleObsCMData <: AbstractCMData
-	obs::Array{Float64,4}                 # [n_times, n_variables, n_conditions, n_param_sets]
+	obs::Array{Float64,4}                 # [n_times, n_variables, n_conditions, n_cm_param_sets]
 	cv::Float64                           # proportional noise level, e.g. 0.10 → 10% CV
 	times::Union{Nothing,Vector{Float64}} # time grid (passed straight through to slice)
 end
@@ -103,7 +103,7 @@ end
 
 # ╔═╡ 0000000b-0000-0000-0000-000000000000
 begin
-	function SmoreBase._sliceParamSet(data::SingleObsCMData, pi::Int)
+	function SmoreBase._sliceCmParamSet(data::SingleObsCMData, pi::Int)
 		SingleObsCMDataSlice(@view(data.obs[:, :, :, pi]), data.cv, data.times)
 	end
 
@@ -115,7 +115,7 @@ begin
 	SmoreBase._cov(d::SingleObsCMDataSlice)  = nothing
 
 	# Required by fitSurrogate for P0 validation
-	SmoreBase.n_param_sets(d::SingleObsCMData) = size(d.obs, 4)
+	SmoreBase.n_cm_param_sets(d::SingleObsCMData) = size(d.obs, 4)
 end
 
 # ╔═╡ 0000000c-0000-0000-0000-000000000000
@@ -205,7 +205,7 @@ md"""
 """
 
 # ╔═╡ 00000017-0000-0000-0000-000000000000
-uq = quantifyUncertainty(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+uq = quantifyUncertainty(ProfileLikelihood(n_points = 25, confidence_level = 0.95), prob, result, 1)
 
 # ╔═╡ 00000018-0000-0000-0000-000000000000
 plot(uq)

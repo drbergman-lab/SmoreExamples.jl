@@ -132,7 +132,7 @@ returned CI bound is `nothing`.
 """
 
 # ╔═╡ 00000010-0000-0000-0000-000000000000
-uq = quantifyUncertainty(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+uq = quantifyUncertainty(ProfileLikelihood(n_points = 25, confidence_level = 0.95), prob, result, 1)
 
 # ╔═╡ 00000011-0000-0000-0000-000000000000
 plot(uq)

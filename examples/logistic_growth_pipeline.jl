@@ -59,8 +59,8 @@ with two free parameters: growth rate $r$ and carrying capacity $K$.
 
 In a real SmoreVerse application the SM would be fit to summary statistics
 produced by an agent-based model or ODE system (the CM). Here we treat the
-logistic equation itself as the SM so results can be checked against known
-ground truth.
+logistic equation itself as the CM (generating the synthetic "data" below) so
+results can be checked against known ground truth.
 
 `AnalyticalSurrogateModel` wraps any closed-form function with the signature
 
@@ -122,7 +122,7 @@ begin
 end
 
 # ╔═╡ 0000000c-0000-0000-0000-000000000000
-md"Shape: $(n_times(data)) times × $(n_variables(data)) variables × $(n_conditions(data)) conditions × $(n_param_sets(data)) param\_sets"
+md"Shape: $(n_times(data)) times × $(n_variables(data)) variables × $(n_conditions(data)) conditions × $(n_cm_param_sets(data)) cm\_param\_sets"
 
 # ╔═╡ 0000000d-0000-0000-0000-000000000000
 md"""
@@ -149,7 +149,7 @@ md"""
 
 `SMFitProblem` bundles the surrogate model, CM data, prior, and (optionally)
 a custom loss into a single object. `fitSurrogate` then takes the problem and
-an initial-guess matrix `P0` `[n_param_sets × n_sm_params]`.
+an initial-guess matrix `P0` `[n_cm_param_sets × n_sm_params]`.
 """
 
 # ╔═╡ 00000010-0000-0000-0000-000000000000
@@ -291,7 +291,7 @@ function $f(u)$, $u \in [0,1]^{n_\text{CM}}$, at many points. That function:
 4. Returns the average `outputFn` value across those samples.
 
 Setting up the GSA therefore requires a **list of `ProfileLikelihoodResult`
-objects** — one per CM cohort — that encode the SM parameter uncertainty at
+objects** — one per CM param_set — that encode the SM parameter uncertainty at
 each CM parameter value where the CM was actually run.
 """
 
@@ -303,46 +303,45 @@ t_gsa = collect(range(0.0, 20.0, 21))   # exponential rise → saturation, as in
 
 # ╔═╡ 0000001b-0000-0000-0000-000000000000
 md"""
-### Constructing cohort UQ results
+### Constructing UQ results for every CM param_set
 
-GSA needs one `ProfileLikelihoodResult` per CM cohort — the SM-parameter
-uncertainty induced by the CM running at each grid point. We build them with the
-very same fit + profile-likelihood workflow from Sections 4–5, now run once per
-cohort:
+GSA needs one `ProfileLikelihoodResult` per CM param_set — the SM-parameter
+uncertainty induced by the CM running at each grid point. `CMData`'s
+`cm_param_sets` axis holds all of them at once, so the whole set is one fit +
+one profile call, not one of each per CM param_set:
 
-1. Choose a grid of CM parameter values (here: `cm_r ∈ {0.4, 0.6, 0.8}`, `cm_K ∈ {2,…,6}` — 15 cohorts in total).
-2. At each grid point, form the cohort's `CMData`. Here we generate it by
-   evaluating the SM at the CM-true parameters; in a real workflow this is the
-   CM's own output.
-3. `fitSurrogate` → `SMFitResult`, then `quantifyUncertainty` → `ProfileLikelihoodResult`.
+1. Choose a grid of CM parameter values (here: `cm_r ∈ {0.4, 0.6, 0.8}`, `cm_K ∈ {2,…,6}` — 15 CM param_sets in total).
+2. Build one `CMData` whose `cm_param_sets` axis holds all 15 columns. Here
+   we generate each column by evaluating the SM at the CM-true parameters; in a
+   real workflow these are the CM's own per-param_set outputs.
+3. `fitSurrogate` (one call, `P0` a matrix with one row per CM param_set) →
+   `SMFitResult`, then `quantifyUncertainty` with no explicit index → the
+   `Vector{ProfileLikelihoodResult}` GSA needs, row-aligned with the CM param_sets.
 
 Because the SM is analytic, all 15 fits take only a second or two. When the CM
-is genuinely expensive you would precompute and cache these per-cohort results,
-but the GSA call itself is unchanged.
+is genuinely expensive you would precompute and cache this `CMData`, but
+the fit + profile calls themselves are unchanged.
 """
 
-# ╔═╡ 0000001c-0000-0000-0000-000000000000
-# Real per-cohort UQ: the Section 4–5 workflow (fit + profile likelihood),
-# run on the CMData a single cohort would produce.
-function cohort_uq(cm_r, cm_K)
-	μ = vec(logistic(t_gsa, [cm_r, cm_K], nothing))
-	d = CMData(μ = μ, σ = fill(noise_σ, length(μ)), times = t_gsa)
-	p = SMFitProblem(sm, d, prior)
-	res = fitSurrogate(p, [cm_r cm_K])
-	return quantifyUncertainty(p, res, ProfileLikelihood(n_points = 15, confidence_level = 0.95))
-end
-
 # ╔═╡ 0000001d-0000-0000-0000-000000000000
-# 3 × 5 = 15 cohorts: cm_r ∈ {0.4,0.6,0.8} (sets growth rate r) × cm_K ∈ {2,…,6} (sets carrying capacity K).
+# 3 × 5 = 15 CM param_sets: cm_r ∈ {0.4,0.6,0.8} (sets growth rate r) × cm_K ∈ {2,…,6} (sets carrying capacity K).
 begin
 	cm_r_vals = [0.4, 0.6, 0.8]
 	cm_K_vals = Float64.(2:6)
 
-	cm_rs        = repeat(cm_r_vals; inner = length(cm_K_vals))
-	cm_Ks        = repeat(cm_K_vals; outer = length(cm_r_vals))
+	cm_rs = repeat(cm_r_vals; inner = length(cm_K_vals))
+	cm_Ks = repeat(cm_K_vals; outer = length(cm_r_vals))
+	n_ps  = length(cm_rs)
 
-	uq_list   = [cohort_uq(r, K) for (r, K) in zip(cm_rs, cm_Ks)]
-	cm_sample = GridCMSample([cm_rs cm_Ks])
+	# One CMData holding all 15 CM param_sets (real workflow: 15 CM outputs, not evaluations of the SM).
+	μ_cm_param_sets = reduce(hcat, [vec(logistic(t_gsa, [cm_rs[i], cm_Ks[i]], nothing)) for i in 1:n_ps])
+	d_cm_param_sets = CMData(μ = μ_cm_param_sets, σ = fill(noise_σ, size(μ_cm_param_sets)), times = t_gsa, cm_param_sets = n_ps)
+	prob_cm_param_sets = SMFitProblem(sm, d_cm_param_sets, prior)
+
+	fit_cm_param_sets = fitSurrogate(prob_cm_param_sets, [cm_rs cm_Ks])   # one row per CM param_set
+	uq_list = quantifyUncertainty(ProfileLikelihood(n_points = 15, confidence_level = 0.95), prob_cm_param_sets, fit_cm_param_sets)
+
+	cm_sample = GridCMSample([cm_rs cm_Ks]; names = ["cm_r", "cm_K"])
 	cm_prior  = ParameterPrior([0.4, 2.0], [0.8, 6.0]; names = ["cm_r", "cm_K"])
 end
 
@@ -351,12 +350,13 @@ let fmt(x) = x === nothing ? "—" : string(round(x; digits = 3))
 	ci(pc) = "[$(fmt(pc.ci_lower)), $(fmt(pc.ci_upper))]"
 	rows = map(eachindex(cm_rs)) do i
 		uq_i = uq_list[i]
-		r = round(uq_i.fit_result.parameters[1, 1]; digits = 3)
-		K = round(uq_i.fit_result.parameters[1, 2]; digits = 3)
+		# fit_result is the shared SMFitResult across all CM param_sets; row i is this one's fit.
+		r = round(uq_i.fit_result.parameters[i, 1]; digits = 3)
+		K = round(uq_i.fit_result.parameters[i, 2]; digits = 3)
 		"| $(cm_rs[i]) | $(cm_Ks[i]) | $r | $(ci(uq_i.profiles[1])) | $K | $(ci(uq_i.profiles[2])) |"
 	end
 Markdown.parse("""
-**Cohort summary** ($(length(cm_rs)) cohorts)
+**CM param_set summary** ($(length(cm_rs)) CM param_sets)
 
 | cm\\_r | cm\\_K | r (fit) | r CI | K (fit) | K CI |
 |--------|--------|---------|------|---------|------|
@@ -499,7 +499,7 @@ md"""
 GSA tells you which CM parameters *matter*. The complementary question —
 given **real-world observations**, which CM parameter values are *consistent*
 with that data? — is answered by `SmoreFit.buildPosterior`, which works from the
-same kind of per-cohort `ProfileLikelihoodResult` that GSA consumes. See
+same kind of per-CM-param_set `ProfileLikelihoodResult` that GSA consumes. See
 [`cm_posterior_pipeline.jl`](./cm_posterior_pipeline.jl) for the full Step 8
 walk-through (bridge methods, accept/graded posteriors, interior queries).
 """
@@ -536,7 +536,6 @@ walk-through (bridge methods, accept/graded posteriors, interior queries).
 # ╠═00000019-0000-0000-0000-000000000000
 # ╠═0000001a-0000-0000-0000-000000000000
 # ╟─0000001b-0000-0000-0000-000000000000
-# ╠═0000001c-0000-0000-0000-000000000000
 # ╠═0000001d-0000-0000-0000-000000000000
 # ╠═0000001e-0000-0000-0000-000000000000
 # ╟─0000001f-0000-0000-0000-000000000000
