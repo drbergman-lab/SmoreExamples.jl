@@ -24,60 +24,34 @@ end
 md"""
 # Custom CM Data: Single Observation Per Parameter Set
 
-`CMData` stores both a mean array `μ` and a standard deviation array `σ` of
-equal shape. This works well when the CM has been run multiple times at each
-parameter set — you compute `μ = mean(runs)` and `σ = std(runs)` and pass both
-in.
+This notebook shows how to write your own `AbstractCMData` subtype for feeding SmoreBase's
+fitting and UQ pipeline data that doesn't fit the built-in `CMData` container.
 
-But what if the CM was run only **once** at each parameter set? There are no
-replicates, so no empirical `σ` to compute. Noise must instead come from domain
-knowledge — for example, a proportional (constant-CV) error model is standard
-in systems biology and PK/PD:
+The motivating scenario: the CM was run only **once** at each parameter set, producing a single
+trajectory with no replicates — so there's no empirical `σ` to compute the way
+`CMData` expects. Noise instead has to come from domain knowledge, e.g. a proportional
+(constant-CV) error model standard in systems biology and PK/PD:
 
 $$\sigma(t) = \text{cv} \times |y(t)|$$
 
 where `cv` is a known coefficient of variation (e.g., 0.10 for a 10% assay CV).
+`SingleObsCMData`, defined below, stores only the raw observations and a single `cv` value,
+computing `σ` on-the-fly whenever SmoreBase's fitting/UQ code asks for it — the same pattern
+applies to any custom noise model.
 
-Rather than allocating a full `σ` array just to encode this scalar rule, we
-define a custom `AbstractCMData` subtype — `SingleObsCMData` — that stores
-only the observations and a single `cv` value, and computes `σ` on-the-fly.
-
-This notebook shows the full SmoreBase pipeline (fit → profile likelihood UQ
-→ prediction sampling) using this custom type. The logistic growth SM is reused
-from `logistic_growth_pipeline.jl` so the two notebooks can be compared
-directly.
+The logistic growth SM (reused from `logistic_growth_pipeline.jl`, and standing in here for the
+CM as well — it generates the single synthetic trajectory below) drives the rest of the
+pipeline — fit → profile likelihood UQ → prediction sampling — unchanged.
 """
-
-# ╔═╡ 00000004-0000-0000-0000-000000000000
-md"""
-## 1  The Surrogate Model
-
-Same logistic growth SM as in `logistic_growth_pipeline.jl`.
-"""
-
-# ╔═╡ 00000005-0000-0000-0000-000000000000
-logistic(t, p, _cond) = reshape(
-	p[2] ./ (1.0 .+ (p[2] / 0.01 - 1.0) .* exp.(-p[1] .* t)),
-	:, 1,
-)
-
-# ╔═╡ 00000006-0000-0000-0000-000000000000
-sm = AnalyticalSurrogateModel(fn = logistic)
-
-# ╔═╡ 00000007-0000-0000-0000-000000000000
-begin
-	t      = collect(0.0:0.5:5.0)   # 11 time points
-	p_true = [0.6, 4.0]             # true r and K
-end
 
 # ╔═╡ 00000008-0000-0000-0000-000000000000
 md"""
-## 2  The Custom Data Type
+## 1  The Custom Data Type
 
 We need three pieces:
 
 1. **`SingleObsCMData`** — the container that holds the raw observations and
-   the scalar CV. It subtype of `AbstractCMData`.
+   the scalar CV. It is a subtype of `AbstractCMData`.
 
 2. **`SingleObsCMDataSlice`** — a single-parameter-set view, subtype of
    `AbstractCMDataSlice`. Slices are what the fitting loop actually sees.
@@ -127,11 +101,25 @@ pipeline needs no changes.
 
 # ╔═╡ 0000000d-0000-0000-0000-000000000000
 md"""
-## 3  CM Data
+## 2  CM Data
 
 A single deterministic CM trajectory (one run per parameter set). Here we
-generate it synthetically by evaluating the logistic at the true parameters.
+generate it synthetically by evaluating the logistic growth function — introduced next as the
+SM — at the true parameters.
 """
+
+# ╔═╡ 00000005-0000-0000-0000-000000000000
+# Implemented as a plain Julia function so it can double as the SM in Section 3 below.
+logistic(t, p, _cond) = reshape(
+	p[2] ./ (1.0 .+ (p[2] / 0.01 - 1.0) .* exp.(-p[1] .* t)),
+	:, 1,
+)
+
+# ╔═╡ 00000007-0000-0000-0000-000000000000
+begin
+	t      = collect(0.0:0.5:5.0)   # 11 time points
+	p_true = [0.6, 4.0]             # true r and K
+end
 
 # ╔═╡ 0000000e-0000-0000-0000-000000000000
 begin
@@ -146,6 +134,17 @@ end
 
 # ╔═╡ 0000000f-0000-0000-0000-000000000000
 md"Shape: $(size(data.obs, 1)) times × 1 variable × 1 condition × 1 param-set (no σ array stored)"
+
+# ╔═╡ 00000004-0000-0000-0000-000000000000
+md"""
+## 3  The Surrogate Model
+
+Having observed logistic growth in the CM data above, we use a logistic growth SM — the same
+function object used above to generate the CM data — same as in `logistic_growth_pipeline.jl`.
+"""
+
+# ╔═╡ 00000006-0000-0000-0000-000000000000
+sm = AnalyticalSurrogateModel(fn = logistic)
 
 # ╔═╡ 00000010-0000-0000-0000-000000000000
 md"""
@@ -249,39 +248,41 @@ plot(samples)
 md"""
 ## 8  Summary
 
-To plug in your own single-observation CM data:
+To write your own custom CM data type:
 
-1. Replace `obs_1d` with your actual CM output array.
-2. Set `cv` to the instrument coefficient of variation (or another noise spec).
-3. Define `_sd` to return whatever noise model fits your domain.
+1. Define a container (subtype `AbstractCMData`) that stores your CM data.
+2. Define a matching slice type (subtype `AbstractCMDataSlice`) for one parameter set — the view
+   the fitting loop actually sees.
+3. Implement the interface for a loss function:
+    a. If using `GaussianNLL`: `_sliceCmParamSet` (container → slice), `_mean` / `_sd` / `_cov`
+           (slice → the quantities `GaussianNLL` needs), and `n_cm_param_sets`.
+    b. If using a custom loss: implement whatever methods your loss needs to extract the data.
 
-If a fixed absolute noise floor is more appropriate than a proportional model,
-change `_sd` to:
+Once these methods are defined, everything downstream — `SMFitProblem`, `fitSurrogate`, profile
+likelihood, prediction sampling — works unchanged; SmoreBase never touches your struct's
+internals directly.
 
 ```julia
 SmoreBase._sd(d::SingleObsCMDataSlice) = fill(d.cv, size(d.obs))
 ```
-
-where `cv` now holds an absolute noise level. All downstream code — `SMFitProblem`,
-`fitSurrogate`, profile likelihood, prediction sampling — stays unchanged.
 """
 
 # ╔═╡ Cell order:
 # ╟─00000001-0000-0000-0000-000000000000
 # ╟─00000002-0000-0000-0000-000000000000
 # ╟─00000003-0000-0000-0000-000000000000
-# ╟─00000004-0000-0000-0000-000000000000
-# ╠═00000005-0000-0000-0000-000000000000
-# ╠═00000006-0000-0000-0000-000000000000
-# ╠═00000007-0000-0000-0000-000000000000
 # ╟─00000008-0000-0000-0000-000000000000
 # ╠═00000009-0000-0000-0000-000000000000
 # ╠═0000000a-0000-0000-0000-000000000000
 # ╠═0000000b-0000-0000-0000-000000000000
 # ╟─0000000c-0000-0000-0000-000000000000
 # ╟─0000000d-0000-0000-0000-000000000000
+# ╠═00000005-0000-0000-0000-000000000000
+# ╠═00000007-0000-0000-0000-000000000000
 # ╠═0000000e-0000-0000-0000-000000000000
 # ╟─0000000f-0000-0000-0000-000000000000
+# ╟─00000004-0000-0000-0000-000000000000
+# ╠═00000006-0000-0000-0000-000000000000
 # ╟─00000010-0000-0000-0000-000000000000
 # ╠═00000011-0000-0000-0000-000000000000
 # ╠═0000001e-0000-0000-0000-000000000000

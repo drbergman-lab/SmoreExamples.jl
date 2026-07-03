@@ -28,58 +28,53 @@ md"""
 real world. A fast *surrogate model* (SM) is trained on CM-generated output,
 then used as a proxy for fitting to data and for analysing CM behaviour.
 
-This notebook walks through the full pipeline using **logistic growth** as a
-toy SM, covering three sub-packages in sequence:
+This notebook walks through `SmoreBase`'s fit/UQ/sampling pipeline and
+`SmoreGSA`'s sensitivity analysis, using **logistic growth** as a toy SM:
 
 | Step | Sub-package | What it does |
 |------|-------------|--------------|
-| 1–4  | `SmoreBase` | Define the SM, build data, fit parameters |
+| 1–4  | `SmoreBase` | Build CM data, define the SM, fit parameters |
 | 5–6  | `SmoreBase` | Quantify SM parameter uncertainty; sample predictions |
 | 7    | `SmoreGSA`  | Global sensitivity of SM outputs to CM parameters |
 
+The remaining pipeline step — building a posterior over CM parameters from
+real-world data via `SmoreFit` — is in the companion notebook
+[`cm_posterior_pipeline.jl`](./cm_posterior_pipeline.jl); see Section 8 below.
+
 The time window runs through the inflection point and into saturation, so both
-the growth rate $r$ and the carrying capacity $K$ are identifiable. A companion
-notebook, [`nonidentifiability.jl`](./nonidentifiability.jl), revisits the model
-on a shorter, exponential-phase-only window to show what a *non-identifiable*
-parameter looks like.
+the growth rate $r$ and the carrying capacity $K$ are identifiable. Another
+companion notebook, [`nonidentifiability.jl`](./nonidentifiability.jl), revisits
+the model on a shorter, exponential-phase-only window to show what a
+*non-identifiable* parameter looks like.
 
 All intermediate results are kept in scope so you can inspect them in the
 REPL after running the notebook.
 """
 
-# ╔═╡ 00000004-0000-0000-0000-000000000000
+# ╔═╡ 0000000a-0000-0000-0000-000000000000
 md"""
-## 1  The Surrogate Model
+## 1  CM Data
 
-The SM is logistic growth:
+In a real SmoreVerse application, CM output would come from an agent-based
+model's summary statistics across replicate runs. Here, so results can be
+checked against known ground truth, we instead generate synthetic CM data
+using logistic growth plus noise:
 
 $$y(t) = \frac{K}{1 + \left(\frac{K}{y_0} - 1\right) e^{-r t}}, \qquad y_0 = 0.01$$
 
-with two free parameters: growth rate $r$ and carrying capacity $K$.
-
-In a real SmoreVerse application the SM would be fit to summary statistics
-produced by an agent-based model or ODE system (the CM). Here we treat the
-logistic equation itself as the CM (generating the synthetic "data" below) so
-results can be checked against known ground truth.
-
-`AnalyticalSurrogateModel` wraps any closed-form function with the signature
-
-```julia
-fn(t::Vector, p::Vector, condition::String) -> Matrix{Float64}
-```
-
-Rows index time points and columns index output variables. A single-variable
-SM must return an `[n_times × 1]` matrix — hence the `reshape`.
+with true parameters $r = 0.6$ and $K = 4.0$. `CMData` holds the mean ($\mu$)
+and standard deviation ($\sigma$) of CM output across stochastic replicates,
+at each time point; the constructor normalises any input array to the
+canonical 4-D shape `[n_times × n_variables × n_conditions × n_cm_param_sets]`.
+In a real workflow, $\mu$ and $\sigma$ would come from many CM replicate runs.
 """
 
 # ╔═╡ 00000005-0000-0000-0000-000000000000
+# Implemented as a plain Julia function so it can double as the SM in Section 2 below.
 logistic(t, p, _cond) = reshape(
 	p[2] ./ (1.0 .+ (p[2] / 0.01 - 1.0) .* exp.(-p[1] .* t)),
 	:, 1,
 )
-
-# ╔═╡ 00000006-0000-0000-0000-000000000000
-sm = AnalyticalSurrogateModel(fn = logistic)
 
 # ╔═╡ 00000007-0000-0000-0000-000000000000
 # Time grid and ground-truth parameters used throughout this notebook.
@@ -87,27 +82,6 @@ begin
 	t      = collect(0.0:1.0:20.0)  # 21 time points: exponential rise → inflection → saturation
 	p_true = [0.6, 4.0]             # true r and K
 end
-
-# ╔═╡ 00000008-0000-0000-0000-000000000000
-md"Evaluating the SM at the true parameters gives an `[21 × 1]` matrix:"
-
-# ╔═╡ 00000009-0000-0000-0000-000000000000
-SmoreBase._evaluate(sm, t, p_true, "default")
-
-# ╔═╡ 0000000a-0000-0000-0000-000000000000
-md"""
-## 2  CM Data
-
-`CMData` holds the mean ($\mu$) and standard deviation ($\sigma$) of CM
-output across stochastic replicates, at each time point. The constructor
-normalises any input array to the canonical 4-D shape
-
-$$[\text{n\_times} \times \text{n\_variables} \times \text{n\_conditions} \times \text{n\_param\_sets}]$$
-
-Here we generate synthetic CM output by evaluating the logistic at the true
-parameters. In a real workflow $\mu$ and $\sigma$ would come from many CM
-replicate runs.
-"""
 
 # ╔═╡ 0000000b-0000-0000-0000-000000000000
 begin
@@ -122,7 +96,35 @@ begin
 end
 
 # ╔═╡ 0000000c-0000-0000-0000-000000000000
-md"Shape: $(n_times(data)) times × $(n_variables(data)) variables × $(n_conditions(data)) conditions × $(n_cm_param_sets(data)) cm\_param\_sets"
+md"Shape: $(n_times(data)) times × $(n_variables(data)) variables × $(n_conditions(data)) conditions × $(n_cm_param_sets(data)) CM parameter sets"
+
+# ╔═╡ 00000004-0000-0000-0000-000000000000
+md"""
+## 2  The Surrogate Model
+
+Having observed logistic growth in the CM data above, we use a logistic
+growth SM — the same function object used above to generate the CM data —
+with two free parameters: growth rate $r$ and carrying capacity $K$.
+
+`AnalyticalSurrogateModel` wraps any closed-form function with the signature
+
+```julia
+fn(t::Vector, p::Vector, condition::String) -> Matrix{Float64}
+```
+
+Rows index time points and columns index output variables. A single-variable
+SM must return an `[n_times × 1]` matrix — hence the `reshape` in `logistic`'s
+definition above.
+"""
+
+# ╔═╡ 00000006-0000-0000-0000-000000000000
+sm = AnalyticalSurrogateModel(fn = logistic)
+
+# ╔═╡ 00000008-0000-0000-0000-000000000000
+md"Evaluating the SM at the true parameters gives an `[21 × 1]` matrix:"
+
+# ╔═╡ 00000009-0000-0000-0000-000000000000
+SmoreBase._evaluate(sm, t, p_true, "default")
 
 # ╔═╡ 0000000d-0000-0000-0000-000000000000
 md"""
@@ -149,7 +151,9 @@ md"""
 
 `SMFitProblem` bundles the surrogate model, CM data, prior, and (optionally)
 a custom loss into a single object. `fitSurrogate` then takes the problem and
-an initial-guess matrix `P0` `[n_cm_param_sets × n_sm_params]`.
+an initial guess `P0` — a `[n_cm_param_sets × n_sm_params]` matrix (one row
+per CM parameter set), or a single vector broadcast to every CM parameter set
+(there is only one here).
 """
 
 # ╔═╡ 00000010-0000-0000-0000-000000000000
@@ -190,7 +194,7 @@ independently, so correlations are not captured.
 """
 
 # ╔═╡ 00000013-0000-0000-0000-000000000000
-uq = quantifyUncertainty(prob, result, ProfileLikelihood(n_points = 25, confidence_level = 0.95))
+uq = quantifyUncertainty(ProfileLikelihood(n_points = 25, confidence_level = 0.95), prob, result, 1)
 
 # ╔═╡ 0000002c-0000-0000-0000-000000000000
 plot(uq)
@@ -291,32 +295,31 @@ function $f(u)$, $u \in [0,1]^{n_\text{CM}}$, at many points. That function:
 4. Returns the average `outputFn` value across those samples.
 
 Setting up the GSA therefore requires a **list of `ProfileLikelihoodResult`
-objects** — one per CM param_set — that encode the SM parameter uncertainty at
+objects** — one per CM parameter set — that encode the SM parameter uncertainty at
 each CM parameter value where the CM was actually run.
 """
 
 # ╔═╡ 00000019-0000-0000-0000-000000000000
-sm_gsa = sm   # the logistic SM from Section 1
+sm_gsa = sm   # the logistic SM from Section 2
 
 # ╔═╡ 0000001a-0000-0000-0000-000000000000
 t_gsa = collect(range(0.0, 20.0, 21))   # exponential rise → saturation, as in Section 1
 
 # ╔═╡ 0000001b-0000-0000-0000-000000000000
 md"""
-### Constructing UQ results for every CM param_set
+### Constructing UQ results for every CM parameter set
 
-GSA needs one `ProfileLikelihoodResult` per CM param_set — the SM-parameter
+GSA needs one `ProfileLikelihoodResult` per CM parameter set — the SM-parameter
 uncertainty induced by the CM running at each grid point. `CMData`'s
-`cm_param_sets` axis holds all of them at once, so the whole set is one fit +
-one profile call, not one of each per CM param_set:
+`cm_param_sets` axis holds all of them at once:
 
-1. Choose a grid of CM parameter values (here: `cm_r ∈ {0.4, 0.6, 0.8}`, `cm_K ∈ {2,…,6}` — 15 CM param_sets in total).
+1. Choose a grid of CM parameter values (here: `cm_r ∈ {0.4, 0.6, 0.8}`, `cm_K ∈ {2,…,6}` — 15 CM parameter sets in total).
 2. Build one `CMData` whose `cm_param_sets` axis holds all 15 columns. Here
    we generate each column by evaluating the SM at the CM-true parameters; in a
-   real workflow these are the CM's own per-param_set outputs.
-3. `fitSurrogate` (one call, `P0` a matrix with one row per CM param_set) →
-   `SMFitResult`, then `quantifyUncertainty` with no explicit index → the
-   `Vector{ProfileLikelihoodResult}` GSA needs, row-aligned with the CM param_sets.
+   real workflow these are the CM's own per-parameter-set outputs.
+3. `fitSurrogate` and `quantifyUncertainty`, each called once over the whole
+   `CMData`, return the `SMFitResult` and `Vector{ProfileLikelihoodResult}` GSA
+   needs, row-aligned with the CM parameter sets.
 
 Because the SM is analytic, all 15 fits take only a second or two. When the CM
 is genuinely expensive you would precompute and cache this `CMData`, but
@@ -329,9 +332,9 @@ begin
 	cm_r_vals = [0.4, 0.6, 0.8]
 	cm_K_vals = Float64.(2:6)
 
-	cm_rs = repeat(cm_r_vals; inner = length(cm_K_vals))
-	cm_Ks = repeat(cm_K_vals; outer = length(cm_r_vals))
-	n_ps  = length(cm_rs)
+	cm_sample = GridCMSample(cm_r_vals, cm_K_vals; names = ["cm_r", "cm_K"])
+	cm_rs, cm_Ks = cm_sample.params[:, 1], cm_sample.params[:, 2]
+	n_ps = length(cm_rs)
 
 	# One CMData holding all 15 CM param_sets (real workflow: 15 CM outputs, not evaluations of the SM).
 	μ_cm_param_sets = reduce(hcat, [vec(logistic(t_gsa, [cm_rs[i], cm_Ks[i]], nothing)) for i in 1:n_ps])
@@ -341,8 +344,7 @@ begin
 	fit_cm_param_sets = fitSurrogate(prob_cm_param_sets, [cm_rs cm_Ks])   # one row per CM param_set
 	uq_list = quantifyUncertainty(ProfileLikelihood(n_points = 15, confidence_level = 0.95), prob_cm_param_sets, fit_cm_param_sets)
 
-	cm_sample = GridCMSample([cm_rs cm_Ks]; names = ["cm_r", "cm_K"])
-	cm_prior  = ParameterPrior([0.4, 2.0], [0.8, 6.0]; names = ["cm_r", "cm_K"])
+	cm_prior = ParameterPrior([0.4, 2.0], [0.8, 6.0]; names = ["cm_r", "cm_K"])
 end
 
 # ╔═╡ 0000001e-0000-0000-0000-000000000000
@@ -356,7 +358,7 @@ let fmt(x) = x === nothing ? "—" : string(round(x; digits = 3))
 		"| $(cm_rs[i]) | $(cm_Ks[i]) | $r | $(ci(uq_i.profiles[1])) | $K | $(ci(uq_i.profiles[2])) |"
 	end
 Markdown.parse("""
-**CM param_set summary** ($(length(cm_rs)) CM param_sets)
+**CM parameter set summary** ($(length(cm_rs)) CM parameter sets)
 
 | cm\\_r | cm\\_K | r (fit) | r CI | K (fit) | K CI |
 |--------|--------|---------|------|---------|------|
@@ -499,7 +501,7 @@ md"""
 GSA tells you which CM parameters *matter*. The complementary question —
 given **real-world observations**, which CM parameter values are *consistent*
 with that data? — is answered by `SmoreFit.buildPosterior`, which works from the
-same kind of per-CM-param_set `ProfileLikelihoodResult` that GSA consumes. See
+same per-CM-parameter-set `ProfileLikelihoodResult` list that GSA consumes. See
 [`cm_posterior_pipeline.jl`](./cm_posterior_pipeline.jl) for the full Step 8
 walk-through (bridge methods, accept/graded posteriors, interior queries).
 """
@@ -508,15 +510,15 @@ walk-through (bridge methods, accept/graded posteriors, interior queries).
 # ╟─00000001-0000-0000-0000-000000000000
 # ╟─00000002-0000-0000-0000-000000000000
 # ╟─00000003-0000-0000-0000-000000000000
-# ╟─00000004-0000-0000-0000-000000000000
-# ╠═00000005-0000-0000-0000-000000000000
-# ╠═00000006-0000-0000-0000-000000000000
-# ╠═00000007-0000-0000-0000-000000000000
-# ╟─00000008-0000-0000-0000-000000000000
-# ╠═00000009-0000-0000-0000-000000000000
 # ╟─0000000a-0000-0000-0000-000000000000
+# ╠═00000005-0000-0000-0000-000000000000
+# ╠═00000007-0000-0000-0000-000000000000
 # ╠═0000000b-0000-0000-0000-000000000000
 # ╟─0000000c-0000-0000-0000-000000000000
+# ╟─00000004-0000-0000-0000-000000000000
+# ╠═00000006-0000-0000-0000-000000000000
+# ╟─00000008-0000-0000-0000-000000000000
+# ╠═00000009-0000-0000-0000-000000000000
 # ╟─0000000d-0000-0000-0000-000000000000
 # ╠═0000000e-0000-0000-0000-000000000000
 # ╠═00000030-0000-0000-0000-000000000000
