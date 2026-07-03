@@ -46,23 +46,20 @@ profile-likelihood and prediction-envelope sections side by side.
 
 # ╔═╡ 00000004-0000-0000-0000-000000000000
 md"""
-## 1  Surrogate model and short-window data
+## 1  CM Data
 
-We build synthetic CM data by evaluating the logistic at known true parameters,
-then sampling it only on `t ∈ [0, 5]` — the curve reaches just $y \approx 0.19$
-there, far below the true carrying capacity $K = 4$. Twenty-one time points are
-used, matching the count in the full-window notebook so the *only* difference is
-the horizon.
+We build synthetic CM data by evaluating logistic growth — introduced next as the SM — at known
+true parameters, then sampling it only on `t ∈ [0, 5]` — the curve reaches just $y \approx 0.19$
+there, far below the true carrying capacity $K = 4$. Twenty-one time points are used, matching
+the count in the full-window notebook so the *only* difference is the time horizon.
 """
 
 # ╔═╡ 00000005-0000-0000-0000-000000000000
+# Implemented as a plain Julia function so it can double as the SM in Section 2 below.
 logistic(t, p, _cond) = reshape(
 	p[2] ./ (1.0 .+ (p[2] / 0.01 - 1.0) .* exp.(-p[1] .* t)),
 	:, 1,
 )
-
-# ╔═╡ 00000006-0000-0000-0000-000000000000
-sm = AnalyticalSurrogateModel(fn = logistic)
 
 # ╔═╡ 00000007-0000-0000-0000-000000000000
 # Short window: exponential phase only — the carrying capacity is never approached.
@@ -83,6 +80,17 @@ begin
 	)
 end
 
+# ╔═╡ 00000017-0000-0000-0000-000000000000
+md"""
+## 2  The Surrogate Model
+
+Having observed logistic growth in the CM data above, we use a logistic growth SM — the same
+function object used above to generate the CM data — same as in `logistic_growth_pipeline.jl`.
+"""
+
+# ╔═╡ 00000006-0000-0000-0000-000000000000
+sm = AnalyticalSurrogateModel(fn = logistic)
+
 # ╔═╡ 00000009-0000-0000-0000-000000000000
 prior = ParameterPrior([0.01, 0.5], [2.0, 10.0]; names = ["r", "K"])
 
@@ -91,7 +99,7 @@ prob = SMFitProblem(sm, data, prior)
 
 # ╔═╡ 0000000b-0000-0000-0000-000000000000
 md"""
-## 2  Fit
+## 3  Fit
 
 `fitSurrogate` still returns a point estimate for both parameters. The growth
 rate is recovered accurately; the carrying-capacity estimate is whatever value
@@ -122,7 +130,7 @@ plot(SMFitPlot(sm, data, result))
 
 # ╔═╡ 0000000f-0000-0000-0000-000000000000
 md"""
-## 3  Profile likelihood reveals the non-identifiability
+## 4  Profile likelihood reveals the non-identifiability
 
 We profile each parameter (fix it on a grid, re-optimise the rest, record the
 profile log-likelihood). For an identifiable parameter the profile peaks at the
@@ -162,7 +170,7 @@ end
 
 # ╔═╡ 00000013-0000-0000-0000-000000000000
 md"""
-## 4  Prediction envelope fans out
+## 5  Prediction envelope fans out
 
 `sampleSMPredictions` draws SM parameter vectors from the profile-likelihood
 uncertainty region and evaluates the SM at each. Because `K` is unconstrained,
@@ -208,9 +216,10 @@ Next: see [`cm_posterior_pipeline.jl`](./cm_posterior_pipeline.jl), which uses
 # ╟─00000003-0000-0000-0000-000000000000
 # ╟─00000004-0000-0000-0000-000000000000
 # ╠═00000005-0000-0000-0000-000000000000
-# ╠═00000006-0000-0000-0000-000000000000
 # ╠═00000007-0000-0000-0000-000000000000
 # ╠═00000008-0000-0000-0000-000000000000
+# ╟─00000017-0000-0000-0000-000000000000
+# ╠═00000006-0000-0000-0000-000000000000
 # ╠═00000009-0000-0000-0000-000000000000
 # ╠═0000000a-0000-0000-0000-000000000000
 # ╟─0000000b-0000-0000-0000-000000000000
