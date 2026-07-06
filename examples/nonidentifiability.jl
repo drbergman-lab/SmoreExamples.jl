@@ -89,7 +89,7 @@ function object used above to generate the CM data — same as in `logistic_grow
 """
 
 # ╔═╡ 00000006-0000-0000-0000-000000000000
-sm = AnalyticalSurrogateModel(fn = logistic)
+sm = CustomSurrogateModel(fn = logistic)
 
 # ╔═╡ 00000009-0000-0000-0000-000000000000
 prior = ParameterPrior([0.01, 0.5], [2.0, 10.0]; names = ["r", "K"])

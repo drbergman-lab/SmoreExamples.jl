@@ -81,7 +81,7 @@ should be chosen against the SM-parameter CI widths the CM noise produces.
 # ╔═╡ 00000005-0000-0000-0000-000000000000
 # The SM, described properly in Section 2 below; needed here to generate the CM parameter sets'
 # data (a simple exponential decay function chosen for its closed-form CM → SM mapping).
-sm = AnalyticalSurrogateModel(
+sm = CustomSurrogateModel(
 	fn = (t, p, _c) -> begin
 		a, b = p
 		reshape(a .* exp.(-b .* t), :, 1)

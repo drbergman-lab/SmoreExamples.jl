@@ -145,7 +145,7 @@ function object used above to generate the CM data — same as in `logistic_grow
 """
 
 # ╔═╡ 00000006-0000-0000-0000-000000000000
-sm = AnalyticalSurrogateModel(fn = logistic)
+sm = CustomSurrogateModel(fn = logistic)
 
 # ╔═╡ 00000010-0000-0000-0000-000000000000
 md"""
