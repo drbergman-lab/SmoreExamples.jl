@@ -106,10 +106,11 @@ Having observed logistic growth in the CM data above, we use a logistic
 growth SM — the same function object used above to generate the CM data —
 with two free parameters: growth rate $r$ and carrying capacity $K$.
 
-`AnalyticalSurrogateModel` wraps any closed-form function with the signature
+`CustomSurrogateModel` wraps any function — closed-form, a numerical solve, or
+a lookup — with the signature
 
 ```julia
-fn(t::Vector, p::Vector, condition::String) -> Matrix{Float64}
+fn(t, p, condition) -> Matrix{Float64}
 ```
 
 Rows index time points and columns index output variables. A single-variable
@@ -118,7 +119,7 @@ definition above.
 """
 
 # ╔═╡ 00000006-0000-0000-0000-000000000000
-sm = AnalyticalSurrogateModel(fn = logistic)
+sm = CustomSurrogateModel(fn = logistic)
 
 # ╔═╡ 00000008-0000-0000-0000-000000000000
 md"Evaluating the SM at the true parameters gives an `[21 × 1]` matrix:"
