@@ -221,7 +221,7 @@ md"""
 `buildPosterior` also accepts an `SMFitProblem` directly instead of the
 `(sm, data, …)` triple — handy if you already have one in hand (e.g., to
 share the loss with another part of the pipeline). The two forms are
-equivalent; defaults are `bridge = :box_overlap`, `min_score = 0.0`.
+equivalent; defaults are `bridge = :box_overlap`, `box_score = :jaccard`, `min_score = 0.0`.
 """
 
 # ╔═╡ 00000015-0000-0000-0000-000000000000
@@ -278,13 +278,15 @@ The bridge picks how the two SM-parameter confidence regions are compared:
 
 | Bridge | Score |
 |---|---|
-| `:box_overlap` | Relative overlap volume of the two marginal-CI hyper-rectangles |
+| `:box_overlap` | Overlap of the two marginal-CI hyper-rectangles, by default as the Jaccard index (overlap volume ÷ union volume) |
 | `:data_trace_in_box` | Fraction of data profile trace points inside the CM box |
 | `:symmetric_trace` | Max of the two-way trace-in-box fractions |
 
 `:box_overlap` is symmetric and cheap; the trace methods give more nuanced
 overlap on regions where the profile shape (not just its CI edges) carries
-information. Below: all three bridges side by side on the same CM parameter sets.
+information. `box_score = :data_normalized` scores box overlap ÷ data-box volume instead
+(the default before SmoreFit 0.6); unlike Jaccard, it gives a CM box that contains the data
+box a score of 1 however wide that box is. Below: all three bridges side by side on the same CM parameter sets.
 """
 
 # ╔═╡ 00000019-0000-0000-0000-000000000000
