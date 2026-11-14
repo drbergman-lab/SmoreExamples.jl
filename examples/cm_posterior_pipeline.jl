@@ -196,6 +196,11 @@ md"""
 against the real data), the CM parameter sets' `uq_results`, and an interpolator over the
 CM grid for interior queries.
 
+It also records what built it: the data-side `SMFitProblem` (`post.data_problem`), the
+profile settings on each side (`post.data_profiles.method` for the data,
+`post.uq_results[i].method` for each CM parameter set), and the interpolation method
+(`post.interp`).
+
 For a `GridCMSample` of CM parameter sets, `acceptedGrid` and `scoreGrid` reshape the result
 back onto the grid axes — handy for heatmaps.
 """
